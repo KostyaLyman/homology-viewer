@@ -37,7 +37,9 @@ sc.main_layout = go.Layout(
     dragmode="select",
     shapes=[]
 )
-sc.main_figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC, 'markers')
+# sc.main_figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC, 'markers')
+sc.main_figure = sc.setup_fig(sc.main_layout)
+
 
 # -----------------------------------------------------------------------------
 #                    ===== DASH SETUP =====
@@ -83,7 +85,7 @@ app.layout = html.Div([
             dbc.Col(
                 width=7,
                 children=[
-                    dcc.Graph(id="main-graph")
+                    dcc.Graph(id="main-figure")
                 ]),
             # Right Side ----------------------------------
             dbc.Col(
@@ -148,8 +150,8 @@ app.layout = html.Div([
 ])
 @app.callback(
     Output('click-data', 'children'),
-    Input('main-graph', 'clickData'),
-    Input('main-graph', 'selectedData'),
+    Input('main-figure', 'clickData'),
+    Input('main-figure', 'selectedData'),
     Input('magic-button', 'n_clicks')
 )
 def display_click_data(clickData, selectData, magicData):
@@ -160,7 +162,7 @@ def display_click_data(clickData, selectData, magicData):
 
 
 @app.callback(
-    Output('main-graph', 'figure'),
+    Output('main-figure', 'figure'),
     inputs=dict(
         rnd_click_data=(Input('random-button', 'n_clicks'), State('random-size-input', 'value')),
         magic_click=Input('magic-button', 'n_clicks'),
@@ -178,18 +180,24 @@ def refresh_fig(rnd_click_data, magic_click, sci_click):
     if button_id == 'random-button':
         rnd_click, rnd_size = rnd_click_data
         print(f">>> random button: {rnd_click} : {rnd_size}")
-        # main_figure.data = [go.Scatter(x=[200], y=[200])]
-        figure = go.Figure(
-            data=[go.Scatter(name=sc.MAIN_SC, x=[200], y=[200], mode='markers+lines')],
-            layout=sc.main_layout
-        )
-        sc.main_figure = figure
+
+        rnd_size = rnd_size if rnd_size else 15
+        sc.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        # x, y = sc.gen_random_points(rnd_size, (0.0, 300.0), (0.0, 300.0))
+        #
+        # sc.update_points((x, y), color='rgba(150, 150, 50, 1)')
+        # pts_upd = sc.gen_points_data((x, y), color='rgba(150, 100, 50, 1)')
+        # sc.main_data['points'].update(pts_upd)
+        # print(f">>> {sc.main_data['points'].keys()}")
+        # sc.upd_trace_points(sc.main_data['points'])
+
         return sc.get_main_figure()
 
     if button_id == 'magic-button':
         print(f">>> magic button: {magic_click}")
-        figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC)
-        sc.main_figure = figure
+        # figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC)
+        # sc.main_figure = figure
+        sc.main_figure = sc.reset_fig()
         return sc.get_main_figure()
 
     if button_id == 'sci-button':
@@ -201,15 +209,15 @@ def refresh_fig(rnd_click_data, magic_click, sci_click):
         print(f"*** tr: {tr}")
         tr = list(tr)
         print(f"*** tr_list: {tr}")
-
-        tr[0].update(dict(x=[100, 200], y=[200, 100]))
-        print(f"*** tr_upd: {tr}")
-        print(f"*** tr_x: {tr[0].x}")
-        print(f"*** tr_x_type: {type(tr[0].x)}")
-        tr_x = list(tr[0].x)
-        tr_x[0] = 133
-        tr[0].x = tr_x
-        print(f"*** tr_upd_upd: {tr}")
+        if tr and len(tr) > 0:
+            tr[0].update(dict(x=[100, 200], y=[200, 100]))
+            print(f"*** tr_upd: {tr}")
+            print(f"*** tr_x: {tr[0].x}")
+            print(f"*** tr_x_type: {type(tr[0].x)}")
+            tr_x = list(tr[0].x)
+            tr_x[0] = 133
+            tr[0].x = tr_x
+            print(f"*** tr_upd_upd: {tr}")
         # sc.main_figure.update_traces()
         #     patch=dict(x=[100, 200], y=[200, 100]),
         #     selector=dict(name=MAIN_SC)
