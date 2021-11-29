@@ -38,7 +38,8 @@ axis_style_free = dict(showticklabels=True,
 EMPTY_LAYOUT = go.Layout(
         title=MAIN_TITLE,
         height=HEIGHT, width=WIDTH,
-        margin=MAIN_MARGIN
+        margin=MAIN_MARGIN,
+        showlegend=False
 )
 
 SIMPLEX_TYPES = ST_POINT, ST_EDGE, ST_TRI, ST_HOLE = ("p", "e", "t", "h")
@@ -290,7 +291,7 @@ def gen_triangulation_df(points):
             ))
         ), ignore_index=True)
         print(f">> add mid >> {mpid} >> {sname} >> {len(mdf.index)}")
-        return mpid + 1, mdf
+        return mpid + 1, mpid, mdf
 
     points = points.set_index("id", drop=False)
     eid = 0
@@ -305,13 +306,13 @@ def gen_triangulation_df(points):
         # 0) make triangle dict
         ABC = points.loc[[pid_A, pid_B, pid_C]]
         tmid_x, tmid_y = calc_mid(ABC["x"], ABC["y"])
-        mpid, mids_df = add_mid_point(mids_df, mpid, tmid_x, tmid_y, tid, stype=ST_TRI)
+        mpid, mpid_old, mids_df = add_mid_point(mids_df, mpid, tmid_x, tmid_y, tid, stype=ST_TRI)
         tname = f"{ST_TRI}{tid:04d}"
         tri_row = dict(id=int(tid), name=tname,
                        pid_1=int(pid_A), pid_2=int(pid_B), pid_3=int(pid_C),
                        eid_1=None, eid_2=None, eid_3=None,
                        ort_1=None, ort_2=None, ort_3=None,
-                       mid_point=int(mpid),
+                       mid_point=int(mpid_old),
                        area=calc_area(ABC["x"], ABC["y"]))
 
         # 1) check existence of edges in edge_df
@@ -328,13 +329,13 @@ def gen_triangulation_df(points):
                 edge_points = ABC.loc[list(edge)]
                 ename = f"{ST_EDGE}{eid:04d}"
                 emid_x, emid_y = calc_mid(edge_points["x"], edge_points["y"])
-                mpid, mids_df = add_mid_point(mids_df, mpid, emid_x, emid_y, tid, stype=ST_EDGE)
+                mpid, mpid_old, mids_df = add_mid_point(mids_df, mpid, emid_x, emid_y, eid, stype=ST_EDGE)
                 edge_dict = dict(
                     id=int(eid), name=ename,
                     pid_1=edge[0], pid_2=edge[1],
                     cof_pos=int(tid), cof_neg=0,
                     cof_pos_type=ST_TRI, cof_neg_type=None,
-                    mid_point=int(mpid),
+                    mid_point=int(mpid_old),
                     length=calc_length(edge_points["x"], edge_points["y"])
                 )
                 edge_customdata = edge_dict.copy()
@@ -396,7 +397,7 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
     def none_row():
         return plotly_row(id=None, name=None, x=None, y=None, color=None, customdata=None)
 
-    points = points.set_index("id")
+    points = points.set_index("id", drop=False)
     plotly_edges = plotly_row()
     plotly_edges_mid = pd.DataFrame()
 
@@ -404,7 +405,7 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
         p1 = points.loc[edge['pid_1']]
         p2 = points.loc[edge['pid_2']]
         mp = points.loc[edge['mid_point']]
-        if mp['mid_point'] != edge['mid_point']:
+        if mp['mid_point'] != edge['id'] or edge['mid_point'] != mp['id']:
             raise Exception("mid point ids are wrong", edge, mp)
 
         plotly_edges = pd.concat([
@@ -468,15 +469,6 @@ def upd_trace_points(ids=None) -> go.Figure:
     plotly_data = pts_data['plotly']
     plotly_data = plotly_data[plotly_data['mid_point'].isna()]
 
-    # tr = main_figure.select_traces(dict(name=SC_POINTS))
-    # tr = list(tr)
-    # if not tr or len(tr) == 0:
-    #     reset_fig()
-    #     return upd_trace_points(ids)
-    #
-    # # else
-    # tr = tr[0]
-
     tr = get_trace(SC_POINTS)
     tr.update(dict(
         x=plotly_data['x'],
@@ -485,14 +477,14 @@ def upd_trace_points(ids=None) -> go.Figure:
         # custom_data=pts_data['plotly_df']['id'],
         # hovertext=pts_data['plotly_df']['id'],
         # hoverinfo=['all'],
-        mode=pts_data['mode']
+        mode=pts_data['mode']  # 'markers'
     ))
     print(f"+++ upd x: {tr.x[0]}")
     print(f"+++ upd mode: {tr.mode}")
     tr.hovertext = plotly_data['name']
     tr.hoverinfo = 'text'
     # tr.marker.color = pts_data['plotly_df']['color']
-    tr.marker.color = pts_data['color']  # 'markers'
+    tr.marker.color = pts_data['color']
 
     tr.customdata = plotly_data['customdata']
     print(f"+++ upd hvr: {tr.hovertext[0]}")
@@ -502,12 +494,25 @@ def upd_trace_points(ids=None) -> go.Figure:
 def upd_trace_edges(ids=None) -> go.Figure:
     global main_figure, main_data
     edges_data = main_data['edges']
+    plotly_edges, plotly_mids = main_data['edges']['plotly'], main_data['edges']['plotly_mids']
 
-    tr_edges = main_figure.select_traces(dict(name=SC_EDGES))
-    tr_edges = list(tr_edges)
-    if not tr_edges or len(tr_edges) == 0:
-        reset_fig()
-        upd_trace_edges(ids)
+    # tr_edges = get_trace(SC_EDGES)
+    # tr_edges_mid = get_trace(SC_EDGES_MID)
+
+    main_figure.update_traces(dict(
+        ids=plotly_edges['name'],
+        x=plotly_edges['x'], y=plotly_edges['y'],
+        mode='lines', marker=None,
+        line_width=edges_data['edge_width'],
+        line_color=edges_data['color'],
+        hovertext=None
+        ),
+        selector=dict(name=SC_EDGES)
+    )
+
+    tr_edges = get_trace(SC_EDGES)
+    print(f"+++ upd edges +++ : {tr_edges.mode} : {tr_edges.x[0:3]}")
+
 
 
     return get_main_figure()
@@ -606,14 +611,17 @@ def triangulate(**kwargs) -> go.Figure:
     global main_figure, main_data
     points_df = main_data['points']['data']
     edges_df, tris_df, mids_df = gen_triangulation_df(points_df)
-    main_data['points']['data'] = pd.concat([points_df, mids_df], ignore_index=True)
 
-    plotly_edges, plotly_edges_mid = gen_plotly_edges()
+    main_data['points']['data'] = pd.concat([points_df, mids_df], ignore_index=True)
+    points_df = main_data['points']['data']
+
+    plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df)
     main_data['edges'].update(dict(
-        data=edges_df, plotly=plotly_edges, plotly_mid=plotly_edges_mid,
-        color=edge_color
+        data=edges_df, plotly=plotly_edges, plotly_mids=plotly_edges_mid,
+        color=edge_color, edge_width=edge_width
     ))
 
+    upd_trace_edges()
     return get_main_figure()
 
 

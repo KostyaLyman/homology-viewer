@@ -14,31 +14,32 @@ import numpy as np
 from textwrap import dedent
 import json
 
-import simcomplex as sc
+import simcomplex as scx
 
 
-sc.MAIN_RANGE = [-0.1, 300.1]
+scx.MAIN_RANGE = [-0.1, 300.1]
 axis_style_free = dict(showgrid=False, zeroline=False, showticklabels=True,
-                       range=sc.MAIN_RANGE,
-                       tickvals=np.linspace(*np.around(sc.MAIN_RANGE), 7)
+                       range=scx.MAIN_RANGE,
+                       tickvals=np.linspace(*np.around(scx.MAIN_RANGE), 7)
                        )
 
-sc.main_layout = go.Layout(
-    title=sc.MAIN_TITLE,
-    height=sc.HEIGHT, width=sc.WIDTH,
-    margin=sc.MAIN_MARGIN,
+scx.main_layout = go.Layout(
+    title=scx.MAIN_TITLE,
+    height=scx.HEIGHT, width=scx.WIDTH,
+    margin=scx.MAIN_MARGIN,
     xaxis=axis_style_free,
     yaxis=axis_style_free,
     autosize=True,
     hovermode='closest',
     clickmode='event+select',
+    showlegend=False,
     # clickmode='event',
     # dragmode="select+lasso"
     dragmode="select",
     shapes=[]
 )
 # sc.main_figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC, 'markers')
-sc.main_figure = sc.setup_fig(sc.main_layout)
+scx.main_figure = scx.setup_fig(scx.main_layout)
 
 
 # -----------------------------------------------------------------------------
@@ -182,51 +183,24 @@ def refresh_fig(rnd_click_data, magic_click, sci_click):
         print(f">>> random button: {rnd_click} : {rnd_size}")
 
         rnd_size = rnd_size if rnd_size else 15
-        sc.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
-        # x, y = sc.gen_random_points(rnd_size, (0.0, 300.0), (0.0, 300.0))
-        #
-        # sc.update_points((x, y), color='rgba(150, 150, 50, 1)')
-        # pts_upd = sc.gen_points_data((x, y), color='rgba(150, 100, 50, 1)')
-        # sc.main_data['points'].update(pts_upd)
-        # print(f">>> {sc.main_data['points'].keys()}")
-        # sc.upd_trace_points(sc.main_data['points'])
-
-        return sc.get_main_figure()
+        scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        return scx.get_main_figure()
 
     if button_id == 'magic-button':
         print(f">>> magic button: {magic_click}")
         # figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC)
         # sc.main_figure = figure
-        sc.main_figure = sc.reset_fig()
-        return sc.get_main_figure()
+        scx.main_figure = scx.reset_fig()
+        return scx.get_main_figure()
 
     if button_id == 'sci-button':
         print(f">>> sci button: {sci_click}")
-        # tr = sc.main_figure.select_traces(dict(name=MAIN_SC))
-        # sc.main_figure.add_trace(go.Bar(x=[1, 2, 3]))
-        # tr = sc.main_figure.select_traces(dict(type='scatter'))
-        tr = sc.main_figure.select_traces(dict(name='main_sc'))
-        print(f"*** tr: {tr}")
-        tr = list(tr)
-        print(f"*** tr_list: {tr}")
-        if tr and len(tr) > 0:
-            tr[0].update(dict(x=[100, 200], y=[200, 100]))
-            print(f"*** tr_upd: {tr}")
-            print(f"*** tr_x: {tr[0].x}")
-            print(f"*** tr_x_type: {type(tr[0].x)}")
-            tr_x = list(tr[0].x)
-            tr_x[0] = 133
-            tr[0].x = tr_x
-            print(f"*** tr_upd_upd: {tr}")
-        # sc.main_figure.update_traces()
-        #     patch=dict(x=[100, 200], y=[200, 100]),
-        #     selector=dict(name=MAIN_SC)
-        # )
+        scx.triangulate()
 
-        return sc.get_main_figure()
+        return scx.get_main_figure()
 
     print(">>> no button")
-    return sc.get_main_figure()
+    return scx.get_main_figure()
 
 
 # -----------------------------------------------------------------------------
