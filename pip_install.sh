@@ -16,6 +16,7 @@ pip install notebook
 pip install plotly
 pip install dash
 pip install dash-bootstrap-components
+pip install dash-extensions
 
 pip install colour
 

@@ -5,6 +5,9 @@ import dash
 from dash import dcc
 from dash import html
 from dash.dependencies import Input, Output, State
+from dash_extensions.enrich import DashProxy, MultiplexerTransform, NoOutputTransform
+# from dash_extensions.enrich import Output, State, Input
+
 import dash_bootstrap_components as dbc
 
 import plotly.graph_objs as go
@@ -50,9 +53,19 @@ scx.main_figure = scx.setup_fig(scx.main_layout)
 # app = dash.Dash(__name__, external_stylesheets=[dbc.themes.VAPOR])
 # app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SANDSTONE])
 # app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SLATE])
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+# app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 # app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 # app = dash.Dash(__name__)
+
+# app = dash.Dash(__name__,
+#                 external_stylesheets=[dbc.themes.FLATLY],
+#                 prevent_initial_callbacks=False
+#                 )
+app = DashProxy(__name__,
+                external_stylesheets=[dbc.themes.FLATLY],
+                prevent_initial_callbacks=False,
+                transforms=[MultiplexerTransform()]
+                )
 app.title = "2D Simplex Viewer"
 # main_figure = px.scatter(x=[], y=[], hovertext=[], text=[],
 #                          title="Main Figure",
@@ -174,46 +187,46 @@ def display_click_data(clickData, selectData, magicData):
 
 
 @app.callback(
-    Output('main-figure', 'figure'),
-    inputs=dict(
-        rnd_click_data=(Input('random-button', 'n_clicks'), State('random-size-input', 'value')),
-        magic_click=Input('magic-button', 'n_clicks'),
-        sci_click=Input('sci-button', 'n_clicks')
-    ))
-def refresh_fig(rnd_click_data, magic_click, sci_click):
-    print(">>> refresh fig")
-    ctx = dash.callback_context
-
-    if not ctx.triggered:
-        button_id = 'No clicks yet'
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    if button_id == 'random-button':
-        rnd_click, rnd_size = rnd_click_data
-        print(f">>> random button: {rnd_click} : {rnd_size}")
-
+    output=Output('main-figure', 'figure'),
+    inputs=[Input('random-button', 'n_clicks'), State('random-size-input', 'value')]
+)
+def random_cloud(rnd_click, rnd_size):
+    print(f"\n================\n" +
+          f" [{rnd_click}] : random cloud({rnd_size})" +
+          f"\n================\n")
+    if rnd_click is not None:
         rnd_size = rnd_size if rnd_size else 15
         scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
         # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
-        return scx.get_main_figure()
 
-    if button_id == 'magic-button':
-        print(f">>> magic button: {magic_click}")
-        # figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC)
-        # sc.main_figure = figure
-        scx.main_figure = scx.reset_fig()
-        return scx.get_main_figure()
-
-    if button_id == 'sci-button':
-        print(f">>> sci button: {sci_click}")
-        scx.triangulate()
-
-        return scx.get_main_figure()
-
-    print(">>> no button")
     return scx.get_main_figure()
 
+
+@app.callback(
+    output=Output('main-figure', 'figure'),
+    inputs=[Input('magic-button', 'n_clicks')]
+)
+def reset_figure(magic_click):
+    print(f"\n================\n" +
+          f" [{magic_click}] : reset_figure " +
+          f"\n================\n")
+    scx.main_figure = scx.reset_fig()
+    return scx.get_main_figure()
+
+
+@app.callback(
+    output=Output('main-figure', 'figure'),
+    inputs=[Input('sci-button', 'n_clicks')]
+)
+def triangulate_cloud(sci_click):
+    print(f"\n================\n" +
+          f" [{sci_click}] : triangulate " +
+          f"\n================\n")
+
+    if sci_click is not None:
+        scx.triangulate()
+
+    return scx.get_main_figure()
 
 # -----------------------------------------------------------------------------
 #                 ===== RUN DASH SERVER =====
