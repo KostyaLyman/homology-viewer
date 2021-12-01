@@ -87,7 +87,7 @@ app.layout = html.Div([
                 width=7,
                 children=[
                     dcc.Graph(id="main-figure")
-                ]),
+                ], style={'overflowY': 'scroll', 'overflowX': 'scroll', 'height': 600}),
             # Right Side ----------------------------------
             dbc.Col(
                 width=4,
@@ -119,23 +119,34 @@ app.layout = html.Div([
                         # style={'border': 'thin lightgrey solid', 'width': '400px'},
                         style={'border': 'thin lightgrey solid'},
                         # className="form-check form-switch",
-                        children=[dcc.Checklist(
-                            id='main-checklist',
-                            options=main_checklist_options,
-                            value=[],
-                            # className="form-check form-switch",
-                            # className="form-check",
-                            # labelStyle={"display": "block"},
-                            labelStyle={"display": "inline-block",
-                                        # 'justify-content': 'space-between',
-                                        'width': '25%',
-                                        'margin': '.5em'},
-                            inputClassName='form-check-input',
-                            labelClassName='form-check-label',
-                            # className="form-check form-switch"
-                            className="form-check"
-                        )])
-                    ),
+                        children=[
+                            dcc.Checklist(
+                                id='main-checklist',
+                                options=main_checklist_options,
+                                value=[],
+                                # labelStyle={"display": "block"},
+                                labelStyle={"display": "inline-block",
+                                            # 'justify-content': 'space-between',
+                                            'width': '25%',
+                                            'margin': '.5em'},
+                                inputClassName='form-check-input',
+                                labelClassName='form-check-label',
+                                # className="form-check form-switch"
+                                className="form-check"
+                            ),
+                            dcc.RadioItems(
+                                id='main-radio',
+                                options=main_checklist_options,
+                                value="verts",
+                                labelStyle={"display": "inline-block",
+                                            # 'justify-content': 'space-between',
+                                            'width': '25%',
+                                            'margin': '.5em'},
+                                inputClassName='form-check-input',
+                                labelClassName='form-check-label',
+                                className="form-check"
+                            )
+                        ])),
                     # Click Data --------------------------
                     html.P(),
                     dbc.Row(html.Div(
@@ -184,6 +195,7 @@ def refresh_fig(rnd_click_data, magic_click, sci_click):
 
         rnd_size = rnd_size if rnd_size else 15
         scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         return scx.get_main_figure()
 
     if button_id == 'magic-button':

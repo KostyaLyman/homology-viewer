@@ -20,7 +20,8 @@ MAIN_RANGE = (-0.1, 300.1)
 MAIN_TICKVALS_NUM = 7
 MAIN_TICKVALS = np.linspace(*np.around(MAIN_RANGE), MAIN_TICKVALS_NUM)
 
-COLORS = ['#C0223B', '#404ca0', 'rgba(173,216,230, 0.5)']  # colors for vertices, edges and 2-simplexes
+# colors for vertices, edges and 2-simplexes
+COLORS = ['rgba(235, 52, 134, 1)', 'rgba(39, 53, 150, 1)', 'rgba(235, 174, 52, 1)']
 
 axis_style_box = dict(showline=True, showticklabels=True, mirror=True,
                       zeroline=False, showgrid=False,
@@ -47,12 +48,14 @@ MID_TYPES = (ST_EDGE, ST_TRI, ST_HOLE)
 
 SC_TRACES = SC_POINTS, SC_EDGES, SC_EDGES_MID, SC_TRIS, SC_TRIS_MID, SC_HOLES = \
     'sc_points', 'sc_edges', 'sc_edges_mid', 'sc_tris', 'sc_tris_mid', "sc_holes"
-SC_MIDS={ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID}
+SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID}
 
 # model
-EMPTY_DATA = dict(points=dict(sc_names=[SC_POINTS]),
-                  edges=dict(sc_names=[SC_EDGES, SC_EDGES_MID]),
-                  tris=dict(sc_names=[SC_TRIS, SC_TRIS_MID]))
+EMPTY_DATA = dict(
+    tris=dict(sc_names=[SC_TRIS, SC_TRIS_MID]),
+    edges=dict(sc_names=[SC_EDGES, SC_EDGES_MID]),
+    points=dict(sc_names=[SC_POINTS])
+)
 main_data = EMPTY_DATA
 
 # view
@@ -89,8 +92,7 @@ def set_margin():
 def reset_fig() -> go.Figure:
     """reset the figure to 3 traces"""
     print("--- reset fig ---")
-    global main_figure
-    global main_data
+    global main_figure, main_data
 
     main_data = EMPTY_DATA
     sc_names = [scn for data in main_data.values() for scn in data['sc_names']]
@@ -399,7 +401,7 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
 
     points = points.set_index("id", drop=False)
     plotly_edges = plotly_row()
-    plotly_edges_mid = pd.DataFrame()
+    plotly_edges_mid = plotly_row()
 
     for index, edge in edges.iterrows():
         p1 = points.loc[edge['pid_1']]
@@ -417,17 +419,47 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
 
         plotly_edges_mid = pd.concat([
             plotly_edges_mid,
-            plotly_row(mp['id'], edge['name'], mp['x'], mp['y'], None, edge['customdata'])
+            # plotly_row(mp['id'], edge['name'], mp['x'], mp['y'], 'SpringGreen', edge['customdata'])
+            plotly_row(mp['id'], edge['name'], mp['x'], mp['y'], edge_color, edge['customdata'])
         ])
 
     return plotly_edges, plotly_edges_mid
 
 
+def gen_plotly_tris(points, tris, tri_color=COLORS[2]):
+    def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
+        return pd.DataFrame(dict(
+            id=id, name=name, x=x, y=y, color=color, customdata=customdata
+        ), index=[id])
 
+    def none_row():
+        return plotly_row(id=None, name=None, x=None, y=None, color=None, customdata=None)
 
+    points = points.set_index("id", drop=False)
+    plotly_tris = plotly_row()
+    plotly_tris_mid = plotly_row()
 
-def gen_plotly_tris(points, tris):
-    pass
+    for index, tri in tris.iterrows():
+        p1 = points.loc[tri['pid_1']]
+        p2 = points.loc[tri['pid_2']]
+        p3 = points.loc[tri['pid_3']]
+        mp = points.loc[tri['mid_point']]
+        if mp['mid_point'] != tri['id'] or tri['mid_point'] != mp['id']:
+            raise Exception("mid point ids are wrong", tri, mp)
+        plotly_tris = pd.concat([
+            plotly_tris,
+            plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
+            plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
+            plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
+            none_row()
+        ])
+
+        plotly_tris_mid = pd.concat([
+            plotly_tris_mid,
+            plotly_row(mp['id'], tri['name'], mp['x'], mp['y'], tri_color, tri['customdata'])
+        ])
+
+    return plotly_tris, plotly_tris_mid
 
 
 def make_plotly_data(points, simplices):
@@ -466,58 +498,123 @@ def upd_trace_points(ids=None) -> go.Figure:
     """
     global main_figure, main_data
     pts_data = main_data['points']
-    plotly_data = pts_data['plotly']
-    plotly_data = plotly_data[plotly_data['mid_point'].isna()]
+    plotly_points = pts_data['plotly']
+    plotly_points = plotly_points[plotly_points['mid_point'].isna()]
 
     tr = get_trace(SC_POINTS)
     tr.update(dict(
-        x=plotly_data['x'],
-        y=plotly_data['y'],
-        # color=pts_data['plotly_df']['color'],
+        ids=plotly_points['name'],
+        x=plotly_points['x'],
+        y=plotly_points['y'],
+        # size=5,
+        # color=pmats_data['plotly_df']['color'],
         # custom_data=pts_data['plotly_df']['id'],
         # hovertext=pts_data['plotly_df']['id'],
         # hoverinfo=['all'],
-        mode=pts_data['mode']  # 'markers'
+        mode='markers'
     ))
-    print(f"+++ upd x: {tr.x[0]}")
-    print(f"+++ upd mode: {tr.mode}")
-    tr.hovertext = plotly_data['name']
+    # print(f"+++ upd x: {tr.x[0]}")
+    # print(f"+++ upd mode: {tr.mode}")
+    tr.hovertext = plotly_points['name']
     tr.hoverinfo = 'text'
     # tr.marker.color = pts_data['plotly_df']['color']
     tr.marker.color = pts_data['color']
+    # tr.marker.line.color = "red"
+    # tr.marker.line.width = 1
+    tr.marker.size = 10
+    tr.marker.opacity = 1
+    # tr.opacity = 1
+    tr.customdata = plotly_points['customdata']
 
-    tr.customdata = plotly_data['customdata']
-    print(f"+++ upd hvr: {tr.hovertext[0]}")
+    # print(f"+++ upd hvr: {tr.hovertext[0]}")
     return get_main_figure()
 
 
 def upd_trace_edges(ids=None) -> go.Figure:
     global main_figure, main_data
     edges_data = main_data['edges']
-    plotly_edges, plotly_mids = main_data['edges']['plotly'], main_data['edges']['plotly_mids']
+    plotly_edges = main_data['edges']['plotly']
 
     # tr_edges = get_trace(SC_EDGES)
     # tr_edges_mid = get_trace(SC_EDGES_MID)
-
     main_figure.update_traces(dict(
         ids=plotly_edges['name'],
         x=plotly_edges['x'], y=plotly_edges['y'],
         mode='lines', marker=None,
         line_width=edges_data['edge_width'],
         line_color=edges_data['color'],
-        hovertext=None
+        # line_color=plotly_edges['color'],
+        hovertext=[], hoverinfo="none"
         ),
         selector=dict(name=SC_EDGES)
     )
 
-    tr_edges = get_trace(SC_EDGES)
-    print(f"+++ upd edges +++ : {tr_edges.mode} : {tr_edges.x[0:3]}")
+    # tr_edges = get_trace(SC_EDGES)
+    # print(f"+++ upd edges +++ : {tr_edges.mode} : {tr_edges.x[0:3]}")
+    return get_main_figure()
 
 
+def upd_trace_edges_mid(ids=None) -> go.Figure:
+    global main_figure, main_data
+    plotly_mids = main_data['edges']['plotly_mids']
+
+    main_figure.update_traces(dict(
+        ids=plotly_mids['name'],
+        x=plotly_mids['x'], y=plotly_mids['y'],
+        mode='markers',
+        marker_size=10, marker_opacity=0, marker_color=plotly_mids['color'],
+        hoverinfo='text',
+        hovertext=plotly_mids['name'],
+        # hoverlabel_font_color="white",
+        customdata=plotly_mids['customdata']
+        ),
+        selector=dict(name=SC_EDGES_MID)
+    )
+
+    # tr_edges_mid = get_trace(SC_EDGES_MID)
+    # print(f"+++ upd edges mid +++ : {tr_edges_mid.mode} : {tr_edges_mid.x[0:3]}")
+    return get_main_figure()
+
+
+def upd_trace_tris(ids=None):
+    global main_figure, main_data
+    tris_data = main_data['tris']
+    plotly_tris = tris_data['plotly']
+
+    main_figure.update_traces(dict(
+        ids=plotly_tris['name'],
+        x=plotly_tris['x'], y=plotly_tris['y'],
+        mode='lines',
+        fill="toself", fillcolor=tris_data['color'], opacity=0.75,
+        line_width=0,
+        hovertext=[], hoverinfo="none"
+    ), selector=dict(name=SC_TRIS))
+
+    # tr_tris = get_trace(SC_TRIS)
+    # print(f"+++ upd tris +++ : {tr_tris.mode} : {tr_tris.x[0:3]}")
 
     return get_main_figure()
 
 
+def upd_trace_tris_mid(ids=None):
+    global main_figure, main_data
+    tris_data = main_data['tris']
+    plotly_mids = tris_data['plotly_mids']
+
+    main_figure.update_traces(dict(
+        ids=plotly_mids['name'],
+        x=plotly_mids['x'], y=plotly_mids['y'],
+        mode='markers',
+        marker_size=10, marker_opacity=0, marker_color=tris_data['color'],
+        hoverinfo='text',
+        hovertext=plotly_mids['name'],
+        hoverlabel_font_color="white",
+        customdata=plotly_mids['customdata']
+    ), selector=dict(name=SC_TRIS_MID))
+
+    tr_tris_mid = get_trace(SC_TRIS_MID)
+    print(f"+++ upd tris mid +++ : {tr_tris_mid.mode} : {tr_tris_mid.x[0:3]}")
+    return get_main_figure()
 
 def make_trace_edges():
     pass
@@ -584,10 +681,14 @@ def random_cloud(n, **kwargs) -> go.Figure:
     xlim = as_range(kwargs.get("xlim", (0, 1)))
     ylim = as_range(kwargs.get("ylim", (0, 1)))
     padding = kwargs.get("padding", 0.05)
-    color = kwargs.get("color", 'rgba(150, 150, 50, 1)')
+    color = kwargs.get("color", COLORS[0])
 
     global main_figure, main_data
-    main_figure.update_layout(xaxis_range=xlim, yaxis_range=ylim)
+    main_figure.update_layout(
+        xaxis_range=xlim, yaxis_range=ylim,
+        xaxis_tickvals=np.linspace(*np.around(xlim), 7),
+        yaxis_tickvals=np.linspace(*np.around(xlim), 7)
+    )
 
     x, y = gen_random_points(n, xlim, ylim, padding)
     pts_upd = gen_points_data((x, y), color)
@@ -614,14 +715,26 @@ def triangulate(**kwargs) -> go.Figure:
 
     main_data['points']['data'] = pd.concat([points_df, mids_df], ignore_index=True)
     points_df = main_data['points']['data']
+    # TODO: main_data['points']['plotly'] = points_df
 
-    plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df)
+    plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df, edge_color)
     main_data['edges'].update(dict(
         data=edges_df, plotly=plotly_edges, plotly_mids=plotly_edges_mid,
         color=edge_color, edge_width=edge_width
     ))
 
+    plotly_tris, plotly_tris_mid = gen_plotly_tris(points_df, tris_df, tri_color)
+    main_data['tris'].update(dict(
+        data=tris_df, plotly=plotly_tris, plotly_mids=plotly_tris_mid,
+        color=tri_color
+    ))
+
     upd_trace_edges()
+    upd_trace_edges_mid()
+    upd_trace_tris()
+    upd_trace_tris_mid()
+    # upd_trace_points()
+
     return get_main_figure()
 
 
