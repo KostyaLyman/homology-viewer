@@ -39,9 +39,12 @@ scx.main_layout = go.Layout(
     # clickmode='event',
     # dragmode="select+lasso"
     dragmode="select",
-    shapes=[]
+    shapes=[],
+    transition={
+        'duration': 500,
+        'easing': 'cubic-in-out'
+    }
 )
-# sc.main_figure = sc.empty_fig(sc.main_layout, sc.MAIN_SC, 'markers')
 scx.main_figure = scx.setup_fig(scx.main_layout)
 
 
@@ -66,19 +69,19 @@ app = DashProxy(__name__,
                 prevent_initial_callbacks=False,
                 transforms=[MultiplexerTransform()]
                 )
-app.title = "2D Simplex Viewer"
-# main_figure = px.scatter(x=[], y=[], hovertext=[], text=[],
-#                          title="Main Figure",
-#                          )
+app.title = "2D Homology Viewer"
 
+
+# TODO: gather all styles here
 styles = {
     'pre': {
         'border': 'thin lightgrey solid',
         'overflowX': 'scroll'
     }
 }
+
 main_checklist_options = [
-    {"label": "Vertices\t", "value": "verts"},
+    {"label": "Points\t", "value": "points"},
     {"label": "Edges\t", "value": "edges"},
     {"label": "Triangles\t", "value": "tris"},
 ]
@@ -105,7 +108,7 @@ app.layout = html.Div([
             dbc.Col(
                 width=4,
                 children=[
-                    # Button ------------------------------
+                    # Buttons -----------------------------
                     dbc.Row(
                         children=[
                             dbc.Col(
@@ -150,7 +153,7 @@ app.layout = html.Div([
                             dcc.RadioItems(
                                 id='main-radio',
                                 options=main_checklist_options,
-                                value="verts",
+                                value="points",
                                 labelStyle={"display": "inline-block",
                                             # 'justify-content': 'space-between',
                                             'width': '25%',
@@ -180,7 +183,6 @@ app.layout = html.Div([
     Input('magic-button', 'n_clicks')
 )
 def display_click_data(clickData, selectData, magicData):
-    # return json.dumps(clickData, indent=2) + json.dumps({"magic": n_clicks})
     return json.dumps(clickData, indent=2) + "@@@\n" + \
            json.dumps(selectData, indent=2) + "@@@\n" +\
            json.dumps({"magic": magicData}) + "@@@"

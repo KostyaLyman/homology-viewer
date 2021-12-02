@@ -9,6 +9,25 @@ class TestSimcomplex(unittest.TestCase):
     def test_temp(self):
         self.assertEqual(sum([1, 2, 3]), 6, "Should be 6")
 
+    def test_as_range(self):
+        lim = scx.as_range(3)
+        self.assertEqual(lim, (0, 3), "single int input")
+
+        lim = scx.as_range(3.5)
+        self.assertEqual(lim, (0, 3.5), "single float input")
+
+        lim = scx.as_range((3.3, 4.4))
+        self.assertEqual(lim, (3.3, 4.4), "tuple of floats, a < b")
+
+        lim = scx.as_range((4.4, 3.3))
+        self.assertEqual(lim, (3.3, 4.4), "tuples of floats, a > b")
+
+        lim = scx.as_range((3, 4))
+        self.assertEqual(lim, (3, 4), "tuple of ints, a < b")
+
+        lim = scx.as_range((4, 3))
+        self.assertEqual(lim, (3, 4), "tuples of ints, a > b")
+
     def test_random_cloud(self):
         scx.setup_fig()
         fig = scx.random_cloud(10, xlim=11, ylim=(2, 5), color="red")

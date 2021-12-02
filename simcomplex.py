@@ -46,14 +46,24 @@ EMPTY_LAYOUT = go.Layout(
 SIMPLEX_TYPES = ST_POINT, ST_EDGE, ST_TRI, ST_HOLE = ("p", "e", "t", "h")
 MID_TYPES = (ST_EDGE, ST_TRI, ST_HOLE)
 
-SC_TRACES = SC_POINTS, SC_EDGES, SC_EDGES_MID, SC_TRIS, SC_TRIS_MID, SC_HOLES = \
-    'sc_points', 'sc_edges', 'sc_edges_mid', 'sc_tris', 'sc_tris_mid', "sc_holes"
+# MID = mid point, HL = highlighting
+SC_POINTS = 'sc_points'
+SC_EDGES, SC_EDGES_MID, SC_EDGES_HL = 'sc_edges', 'sc_edges_mid', 'sc_edges_hl'
+SC_TRIS, SC_TRIS_MID, SC_TRIS_HL = 'sc_tris', 'sc_tris_mid', 'sc_tris_hl'
+SC_HOLES = "sc_holes"
+
+SC_TRACES = \
+    SC_POINTS, \
+    SC_EDGES, SC_EDGES_MID, SC_EDGES_HL, \
+    SC_TRIS, SC_TRIS_MID, SC_TRIS_HL, \
+    SC_HOLES
+
 SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID}
 
 # model
 EMPTY_DATA = dict(
-    tris=dict(sc_names=[SC_TRIS, SC_TRIS_MID]),
-    edges=dict(sc_names=[SC_EDGES, SC_EDGES_MID]),
+    tris=dict(sc_names=[SC_TRIS, SC_TRIS_MID, SC_TRIS_HL]),
+    edges=dict(sc_names=[SC_EDGES, SC_EDGES_MID, SC_EDGES_HL]),
     points=dict(sc_names=[SC_POINTS])
 )
 main_data = EMPTY_DATA
@@ -129,7 +139,8 @@ def setup_fig(layout=main_layout) -> go.Figure:
 #           SIMPLICIAL DATA HANDLING / PROCESSING / GENERATING
 # -----------------------------------------------------------------------------
 def as_range(lim):
-    l_min, l_max = lim if type(lim) is tuple else (0, lim)
+    lim = (0, lim) if type(lim) is int or type(lim) is float else lim
+    l_min, l_max = min(lim), max(lim)
     return l_min, l_max
 
 
@@ -161,19 +172,21 @@ def gen_points_data(points, color=COLORS[0]) -> dict:
         :return: `points` dict
     """
 
-    def gen_points_df(x, y, n) -> pd.DataFrame:
+    def gen_points_df(x, y, n, color) -> pd.DataFrame:
         pids = list(range(1, n + 1))
         pnames = [f"p{pid:04d}" for pid in pids]
+        colors = [color for pid in pids]
         customdata = [
             json.dumps(dict(id=pid, name=f"p{pid:04d}", sc_name=SC_POINTS))
             for pid in pids
         ]
 
         df = pd.DataFrame(dict(
-            id=pids, name=pnames,
-            x=x, y=y,
-            mid_point=None, mid_type=None,
-            customdata=customdata
+            id=pids, name=pnames,            # plotly_row
+            x=x, y=y,                        # plotly_row
+            color=colors,                    # plotly_row
+            customdata=customdata,           # plotly_row
+            mid_point=None, mid_type=None
             # ), index=pids)
         ))
         return df
@@ -183,7 +196,7 @@ def gen_points_data(points, color=COLORS[0]) -> dict:
     n = len(x)
     print(f"+++ gen_points: n={n}, x0={x[0]:.3f}, y0={y[0]:.3f}")
 
-    pts_df = gen_points_df(x, y, n)
+    pts_df = gen_points_df(x, y, n, color)
 
     # in case of points there is no difference between
     # the model data of points
@@ -231,8 +244,8 @@ def gen_triangulation_df(points):
 
     mids_df = pd.DataFrame(dict(
         id=[], name=[], x=[], y=[],
-        mid_point=[], mid_type=[],
-        customdata=[]
+        color=[], customdata=[],
+        mid_point=[], mid_type=[]
     ))
 
     def calc_mid(X, Y):
@@ -286,6 +299,7 @@ def gen_triangulation_df(points):
             id=int(mpid), name=sname, x=x, y=y,
             mid_point=sid,
             mid_type=stype,
+            color=None,
             customdata=json.dumps(dict(
                 id=int(mpid), name=sname,
                 mid_point=sid, mid_type=stype,
@@ -390,14 +404,17 @@ def gen_triangulation_df(points):
     return edges_df, tris_df, mids_df
 
 
-def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
-    def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
-        return pd.DataFrame(dict(
-            id=id, name=name, x=x, y=y, color=color, customdata=customdata
-        ), index=[id])
+def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
+    return pd.DataFrame(dict(
+        id=id, name=name, x=x, y=y, color=color, customdata=customdata
+    ), index=[id])
 
-    def none_row():
-        return plotly_row(id=None, name=None, x=None, y=None, color=None, customdata=None)
+
+def plotly_none_row():
+    return plotly_row(id=None, name=None, x=None, y=None, color=None, customdata=None)
+
+
+def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
 
     points = points.set_index("id", drop=False)
     plotly_edges = plotly_row()
@@ -414,7 +431,7 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
             plotly_edges,
             plotly_row(edge['id'], edge['name'], p1['x'], p1['y'], edge_color, edge['customdata']),
             plotly_row(edge['id'], edge['name'], p2['x'], p2['y'], edge_color, edge['customdata']),
-            none_row()
+            plotly_none_row()
          ])
 
         plotly_edges_mid = pd.concat([
@@ -427,14 +444,6 @@ def gen_plotly_edges(points, edges, edge_color=COLORS[1]):
 
 
 def gen_plotly_tris(points, tris, tri_color=COLORS[2]):
-    def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
-        return pd.DataFrame(dict(
-            id=id, name=name, x=x, y=y, color=color, customdata=customdata
-        ), index=[id])
-
-    def none_row():
-        return plotly_row(id=None, name=None, x=None, y=None, color=None, customdata=None)
-
     points = points.set_index("id", drop=False)
     plotly_tris = plotly_row()
     plotly_tris_mid = plotly_row()
@@ -451,7 +460,7 @@ def gen_plotly_tris(points, tris, tri_color=COLORS[2]):
             plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
             plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
             plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
-            none_row()
+            plotly_none_row()
         ])
 
         plotly_tris_mid = pd.concat([
@@ -460,18 +469,6 @@ def gen_plotly_tris(points, tris, tri_color=COLORS[2]):
         ])
 
     return plotly_tris, plotly_tris_mid
-
-
-def make_plotly_data(points, simplices):
-    # points are the given data points,
-    # complex_s is the list of indices in the array of points defining 2-simplexes(triangles)
-    # in the simplicial complex to be plotted
-    X = []
-    Y = []
-    for s in simplices:
-        X += [points[s[k]][0] for k in [0, 1, 2, 0]] + [None]
-        Y += [points[s[k]][1] for k in [0, 1, 2, 0]] + [None]
-    return X, Y
 
 
 # -----------------------------------------------------------------------------
@@ -490,6 +487,7 @@ def get_trace(trace_name):
 
     return tr[0]
 
+
 def upd_trace_points(ids=None) -> go.Figure:
     """
         :param pts_data: current ``points`` dict
@@ -501,30 +499,39 @@ def upd_trace_points(ids=None) -> go.Figure:
     plotly_points = pts_data['plotly']
     plotly_points = plotly_points[plotly_points['mid_point'].isna()]
 
-    tr = get_trace(SC_POINTS)
-    tr.update(dict(
+    # tr = get_trace(SC_POINTS)
+    # tr.update(dict(
+    #     ids=plotly_points['name'],
+    #     x=plotly_points['x'],
+    #     y=plotly_points['y'],
+    #     # size=5,
+    #     # color=pmats_data['plotly_df']['color'],
+    #     # custom_data=pts_data['plotly_df']['id'],
+    #     # hovertext=pts_data['plotly_df']['id'],
+    #     # hoverinfo=['all'],
+    #     mode='markers'
+    # ))
+    # # print(f"+++ upd x: {tr.x[0]}")
+    # # print(f"+++ upd mode: {tr.mode}")
+    # tr.hovertext = plotly_points['name']
+    # tr.hoverinfo = 'text'
+    # # tr.marker.color = pts_data['plotly_df']['color']
+    # tr.marker.color = pts_data['color']
+    # # tr.marker.line.color = "red"
+    # # tr.marker.line.width = 1
+    # tr.marker.size = 10
+    # tr.marker.opacity = 1
+    # # tr.opacity = 1
+    # tr.customdata = plotly_points['customdata']
+
+    main_figure.update_traces(dict(
         ids=plotly_points['name'],
-        x=plotly_points['x'],
-        y=plotly_points['y'],
-        # size=5,
-        # color=pmats_data['plotly_df']['color'],
-        # custom_data=pts_data['plotly_df']['id'],
-        # hovertext=pts_data['plotly_df']['id'],
-        # hoverinfo=['all'],
-        mode='markers'
-    ))
-    # print(f"+++ upd x: {tr.x[0]}")
-    # print(f"+++ upd mode: {tr.mode}")
-    tr.hovertext = plotly_points['name']
-    tr.hoverinfo = 'text'
-    # tr.marker.color = pts_data['plotly_df']['color']
-    tr.marker.color = pts_data['color']
-    # tr.marker.line.color = "red"
-    # tr.marker.line.width = 1
-    tr.marker.size = 10
-    tr.marker.opacity = 1
-    # tr.opacity = 1
-    tr.customdata = plotly_points['customdata']
+        x=plotly_points['x'], y=plotly_points['y'],
+        mode='markers',
+        marker_size=6, marker_opacity=1, marker_color=plotly_points['color'],
+        hoverinfo='text', hovertext = plotly_points['name'],
+        customdata=plotly_points['customdata']
+    ), selector=dict(name=SC_POINTS))
 
     # print(f"+++ upd hvr: {tr.hovertext[0]}")
     return get_main_figure()
@@ -616,12 +623,25 @@ def upd_trace_tris_mid(ids=None):
     print(f"+++ upd tris mid +++ : {tr_tris_mid.mode} : {tr_tris_mid.x[0:3]}")
     return get_main_figure()
 
+
 def make_trace_edges():
     pass
 
 def make_trace_tris():
     pass
 
+# deprecated / do not use
+def make_plotly_data(points, simplices):
+    """deprecated / do not use"""
+    # points are the given data points,
+    # complex_s is the list of indices in the array of points defining 2-simplexes(triangles)
+    # in the simplicial complex to be plotted
+    X = []
+    Y = []
+    for s in simplices:
+        X += [points[s[k]][0] for k in [0, 1, 2, 0]] + [None]
+        Y += [points[s[k]][1] for k in [0, 1, 2, 0]] + [None]
+    return X, Y
 
 # deprecated / do not use
 def make_trace(x, y, point_color=COLORS[0], line_color=COLORS[1]):
@@ -658,12 +678,6 @@ def make_triangulation(x, y):
 
     return main_figure
 
-
-
-# not used
-# def gen_random_triangulation(n, xlim=(0, 1), ylim=(0, 1)):
-#     x, y = gen_random_points(n, xlim, ylim)
-#     return make_triangulation(x, y)
 
 
 
