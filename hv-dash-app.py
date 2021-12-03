@@ -39,11 +39,11 @@ scx.main_layout = go.Layout(
     # clickmode='event',
     # dragmode="select+lasso"
     dragmode="select",
-    shapes=[],
-    transition={
-        'duration': 500,
-        'easing': 'cubic-in-out'
-    }
+    # transition={
+    #     'duration': 500,
+    #     'easing': 'cubic-in-out'
+    # },
+    shapes=[]
 )
 scx.main_figure = scx.setup_fig(scx.main_layout)
 
@@ -81,9 +81,9 @@ styles = {
 }
 
 main_checklist_options = [
-    {"label": "Points\t", "value": "points"},
-    {"label": "Edges\t", "value": "edges"},
-    {"label": "Triangles\t", "value": "tris"},
+    {"label": "Points\t", "value": scx.ST_POINT},
+    {"label": "Edges\t", "value": scx.ST_EDGE},
+    {"label": "Triangles\t", "value": scx.ST_TRI},
 ]
 
 
@@ -93,7 +93,7 @@ main_checklist_options = [
 # -----------------------------------------------------------------------------
 app.layout = html.Div([
     # Title -----------------------------------------------
-    dbc.Row([html.H1("2D Simplex Viewer")],
+    dbc.Row([html.H1("2D Homology Viewer")],
             style={'textAlign': "center"}),
     # Main Layout -----------------------------------------
     dbc.Row(
@@ -114,7 +114,7 @@ app.layout = html.Div([
                             dbc.Col(
                                 width=4,
                                 children=[
-                                    html.Button("Randomize", id='random-button',
+                                    html.Button("Random cloud", id='random-button',
                                                 className='btn btn-info'),
                                     dcc.Input(id='random-size-input', type="number",
                                               placeholder='number of vertices')
@@ -122,7 +122,7 @@ app.layout = html.Div([
                             dbc.Col(
                                 width={"size": 3, "offset": 2},
                                 children=[
-                                    html.Button("Magic", id='magic-button',
+                                    html.Button("Reset", id='reset-button',
                                                 className='btn btn-primary'),
                                     html.Button("Science", id='sci-button',
                                                 className='btn btn-warning',
@@ -153,7 +153,7 @@ app.layout = html.Div([
                             dcc.RadioItems(
                                 id='main-radio',
                                 options=main_checklist_options,
-                                value="points",
+                                value=scx.ST_POINT,
                                 labelStyle={"display": "inline-block",
                                             # 'justify-content': 'space-between',
                                             'width': '25%',
@@ -177,19 +177,52 @@ app.layout = html.Div([
         ])
 ])
 @app.callback(
-    Output('click-data', 'children'),
-    Input('main-figure', 'clickData'),
-    Input('main-figure', 'selectedData'),
-    Input('magic-button', 'n_clicks')
+    output=[Output('click-data', 'children'),
+            Output('main-figure', 'figure')],
+    inputs=[Input('main-figure', 'clickData'),
+            Input('main-figure', 'selectedData'),
+            Input('reset-button', 'n_clicks'),
+            Input('main-radio', 'value')]
 )
-def display_click_data(clickData, selectData, magicData):
-    return json.dumps(clickData, indent=2) + "@@@\n" + \
-           json.dumps(selectData, indent=2) + "@@@\n" +\
-           json.dumps({"magic": magicData}) + "@@@"
+def display_click_data(clickData, selectData, reset_click, stype):
+    print(f"%%% select data %%% {type(selectData)}")
+    print(f"%%% select data %%% {selectData}")
+    if selectData and selectData['points']:
+        # sname = selectData['points'][0]['id']
+        snames = [pts['id'] for pts in selectData['points']]
+
+        if stype == scx.ST_EDGE:
+            # TODO: when there are selected points and radio switches to edges we get a list of p_names here
+            scx.highlight_edges(snames)
+
+        if stype == scx.ST_POINT:
+            scx.highlight_points(snames)
+
+    else:
+        scx.clear_highlighting()
+
+    json_dump = "@@@ click @@@" + \
+                json.dumps(clickData, indent=2) + \
+                "\n@@@ select @@@\n" + \
+                json.dumps(selectData, indent=2) + \
+                "\n@@@ magic @@@\n" + \
+                json.dumps({"magic": reset_click})
+
+    return json_dump, scx.get_main_figure()
 
 
 @app.callback(
     output=Output('main-figure', 'figure'),
+    inputs=Input('main-radio', 'value')
+)
+def radio_callback(radio_value):
+    print(f"%%% radio %%% {radio_value}")
+    scx.show_hide_points(radio_value)
+    return scx.get_main_figure()
+
+
+@app.callback(
+    output=[Output('main-figure', 'figure'), Output('main-radio', 'value')],
     inputs=[Input('random-button', 'n_clicks'), State('random-size-input', 'value')]
 )
 def random_cloud(rnd_click, rnd_size):
@@ -198,19 +231,20 @@ def random_cloud(rnd_click, rnd_size):
           f"\n================\n")
     if rnd_click is not None:
         rnd_size = rnd_size if rnd_size else 15
-        scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
         # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
+        scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        # scx.show_hide_points(scx.ST_POINT)
 
-    return scx.get_main_figure()
+    return scx.get_main_figure(), scx.ST_POINT
 
 
 @app.callback(
     output=Output('main-figure', 'figure'),
-    inputs=[Input('magic-button', 'n_clicks')]
+    inputs=[Input('reset-button', 'n_clicks')]
 )
-def reset_figure(magic_click):
+def reset_figure(reset_click):
     print(f"\n================\n" +
-          f" [{magic_click}] : reset_figure " +
+          f" [{reset_click}] : reset_figure " +
           f"\n================\n")
     scx.main_figure = scx.reset_fig()
     return scx.get_main_figure()
