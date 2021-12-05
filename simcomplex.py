@@ -84,6 +84,7 @@ main_data = EMPTY_DATA
 main_layout = EMPTY_LAYOUT
 main_figure = go.Figure(layout=main_layout)
 
+
 # -----------------------------------------------------------------------------
 #               UTILITY
 # -----------------------------------------------------------------------------
@@ -94,14 +95,37 @@ def as_range(lim):
 
 
 def get_stype(name: str):
-    if type(name) is not str:
-        raise Exception("name is not string", name)
+    # if type(name) is not str:
+    #     raise Exception("name is not string", name)
 
     stype = name[0]
     if stype not in SIMPLEX_TYPES:
-        raise Exception("extracted type is not known")
+        raise Exception("extracted type is not known", stype, name)
 
     return stype
+
+
+def filter_stype(names: list, stype) -> list:
+    filtered_names = list(filter(lambda name: get_stype(name) == stype, names))
+    return filtered_names
+
+
+def get_sname(sid, stype):
+    sname = f"{stype}{sid:04d}"
+    return sname
+
+
+def get_pname(pid):
+    pname = "{stype}{pid:04d}".format(stype=ST_POINT, pid=pid)
+    return pname
+
+def get_ename(eid):
+    ename = f"{ST_EDGE}{eid:04d}"
+    return ename
+
+def get_tname(tid):
+    tname = f"{ST_TRI}{tid:04d}"
+    return tname
 
 
 # -----------------------------------------------------------------------------
@@ -185,17 +209,6 @@ def clear_highlighting() -> go.Figure:
     return get_main_figure()
 
 
-def get_sname(sid, stype):
-    return f"{stype}{sid:04d}"
-
-def get_pname(pid):
-    return f"{ST_POINT}{pid:04d}"
-
-def get_ename(eid):
-    return f"{ST_EDGE}{eid:04d}"
-
-def get_tname(tid):
-    return f"{ST_TRI}{tid:04d}"
 
 # -----------------------------------------------------------------------------
 #           SIMPLICIAL DATA HANDLING / PROCESSING / GENERATING
@@ -557,9 +570,12 @@ def gen_plotly_tris(points, tris, tri_colors=(COLORS_DICT[SC_TRIS], COLORS_DICT[
             raise Exception("mid point ids are wrong", tri, mp)
         plotly_tris = pd.concat([
             plotly_tris,
-            plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
-            plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
-            plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
+            # plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
+            # plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
+            # plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
+            plotly_row(p1['name'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
+            plotly_row(p2['name'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
+            plotly_row(p3['name'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
             plotly_none_row(tri['id'], tri['name'])
         ])
 
@@ -696,8 +712,12 @@ def upd_trace_tris(ids=None) -> go.Figure:
     tris_data = main_data['tris']
     plotly_tris = tris_data['plotly']
 
+    print("\n>>> plotly tris <<<")
+    print(f"{plotly_tris['id']}")
+    print("\n-------------------")
+
     main_figure.update_traces(dict(
-        ids=plotly_tris['name'],
+        ids=plotly_tris['id'],
         x=plotly_tris['x'], y=plotly_tris['y'],
         mode='lines', marker=None,
         fill="toself", fillcolor=tris_data['color'], opacity=0.75,
@@ -886,10 +906,25 @@ def triangulate(**kwargs) -> go.Figure:
     return get_main_figure()
 
 
+def get_show_hide_sc(stype):
+    if stype == ST_POINT:  # turn off all mid-points
+        sc_on = SC_POINTS
+        sc_off = list(SC_MIDS.values())
+
+    elif stype in MID_TYPES:  # turn off all except a stype's mid point
+        sc_on = SC_MIDS[stype]
+        sc_off = [SC_POINTS] + [sc for sc in SC_MIDS.values() if sc != sc_on]
+
+    else:  # turn off everything
+        sc_on = None
+        sc_off = [SC_POINTS] + list(SC_MIDS.values())
+    return sc_off, sc_on
+
+
 def show_hide_points(stype) -> go.Figure:
     """
-    Shows points/mid_points associated with ``stype``,
-    hides the rest.
+    Shows  points/mid_points associated with ``stype``,
+    hides the rest, by changing trace.visible = True/False
         :param stype:
         :return:
     """
@@ -901,17 +936,7 @@ def show_hide_points(stype) -> go.Figure:
                 visible=visible
             ), selector=dict(name=sc_name))
 
-    if stype == ST_POINT:      # turn off all mid-points
-        sc_on = SC_POINTS
-        sc_off = list(SC_MIDS.values())
-
-    elif stype in MID_TYPES:   # turn off all except a stype's mid point
-        sc_on = SC_MIDS[stype]
-        sc_off = [SC_POINTS] + [sc for sc in SC_MIDS.values() if sc != sc_on]
-
-    else:                      # turn off everything
-        sc_on = None
-        sc_off = [SC_POINTS] + list(SC_MIDS.values())
+    sc_off, sc_on = get_show_hide_sc(stype)
 
     # turn off highlights too
     clear_highlighting()
@@ -920,6 +945,46 @@ def show_hide_points(stype) -> go.Figure:
     set_visibility(sc_on, True)
     for sc in sc_off:
         set_visibility(sc, False)
+
+    return get_main_figure()
+
+
+def show_obscure_points(stype) -> go.Figure:
+    """
+    Shows points/mid_points associated with ``stype``,
+    hides the rest, by changing marker_opacity = CONFIG['opacity']/0
+        :param stype:
+        :return:
+    """
+    global main_figure, main_data
+
+    sc_opacities = {
+        SC_POINTS: 1,
+        SC_EDGES_MID: MID_CONFIG['opacity'],
+        SC_TRIS_MID: MID_CONFIG['opacity'],
+        SC_HOLES: MID_CONFIG['opacity']
+    }
+
+    def set_opacities(sc_names, visible):
+        if not sc_names:
+            return
+
+        sc_names = sc_names if type(sc_names) == list else [sc_names]
+        for sc_name in sc_names:
+            opacity = sc_opacities[sc_name] if visible else 0
+            main_figure.update_traces(dict(
+                marker_opacity=opacity
+            ), selector=dict(name=sc_name))
+
+    sc_off, sc_on = get_show_hide_sc(stype)
+
+    # turn off highlights too
+    clear_highlighting()
+
+    # turn traces on/off
+    set_opacities(sc_on, True)
+    for sc in sc_off:
+        set_opacities(sc, False)
 
     return get_main_figure()
 
@@ -969,7 +1034,7 @@ def highlight_edges(edge_names: list, **kwargs) -> go.Figure:
     plotly_hl = gen_plotly_hl(edge_names, plotly_edges, hl_color)
 
     # clear_highlighting()
-    upd_trace_edges_hl(sc_name, plotly_hl, hl_color,)
+    upd_trace_edges_hl(sc_name, plotly_hl, hl_color)
 
     return get_main_figure()
 

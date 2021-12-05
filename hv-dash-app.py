@@ -192,13 +192,16 @@ def display_click_data(clickData, selectData, reset_click, stype):
         print(f"%%% select data %%% {snames}")
 
         if stype == scx.ST_POINT:
-            scx.highlight_points(snames)
+            pnames = set(scx.filter_stype(snames, scx.ST_POINT))
+            scx.highlight_points(pnames)
 
         if stype == scx.ST_EDGE:
-            scx.highlight_edges(snames)
+            enames = set(scx.filter_stype(snames, scx.ST_EDGE))
+            scx.highlight_edges(enames)
 
         if stype == scx.ST_TRI:
-            scx.highlight_triangles(snames)
+            tnames = set(scx.filter_stype(snames, scx.ST_TRI))
+            scx.highlight_triangles(tnames)
 
     else:
         scx.clear_highlighting()
@@ -219,7 +222,9 @@ def display_click_data(clickData, selectData, reset_click, stype):
 )
 def radio_callback(radio_value):
     print(f"%%% radio %%% {radio_value}")
-    scx.show_hide_points(radio_value)
+    # scx.clear_highlighting()
+    # scx.show_hide_points(radio_value)
+    scx.show_obscure_points(radio_value)
     return scx.get_main_figure(), dict(points=[])
 
 
