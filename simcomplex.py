@@ -12,7 +12,8 @@ import json
 # -----------------------------------------------------------------------------
 HEIGHT, WIDTH = 800, 800
 MAIN_SC = 'main_sc'
-
+MARKER_SIZE = 6
+EDGE_WIDTH = 1.5
 
 MAIN_TITLE = "Main figure"
 MAIN_MARGIN = {'b': 40, 'l': 40, 'r': 40, 't': 40}
@@ -73,8 +74,8 @@ COLORS_DICT = {
 
 # model
 EMPTY_DATA = dict(
-    tris=dict(sc_names=[SC_TRIS, SC_TRIS_MID, SC_TRIS_HL]),
-    edges=dict(sc_names=[SC_EDGES, SC_EDGES_MID, SC_EDGES_HL, SC_EDGES_NEG_HL]),
+    tris=dict(sc_names=[SC_TRIS, SC_TRIS_HL, SC_TRIS_MID]),
+    edges=dict(sc_names=[SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID]),
     points=dict(sc_names=[SC_POINTS])
 )
 main_data = EMPTY_DATA
@@ -107,14 +108,24 @@ def get_stype(name: str):
 #               GETTER / SETTER
 # -----------------------------------------------------------------------------
 def get_main_figure() -> go.Figure:
-    # print("<<< get main figure <<<")
+    global main_figure
     return main_figure
+
+
+def get_main_data() -> dict:
+    global main_data
+    return main_data
+
+
+def get_data(stype) -> dict:
+    global main_data
+    skey = {ST_POINT: 'points', ST_EDGE: 'edges', ST_TRI: 'tris'}[stype]
+    return main_data[skey]
 
 
 def set_margin():
     """handle change of margins"""
     pass
-
 
 
 def reset_fig() -> go.Figure:
@@ -174,6 +185,17 @@ def clear_highlighting() -> go.Figure:
     return get_main_figure()
 
 
+def get_sname(sid, stype):
+    return f"{stype}{sid:04d}"
+
+def get_pname(pid):
+    return f"{ST_POINT}{pid:04d}"
+
+def get_ename(eid):
+    return f"{ST_EDGE}{eid:04d}"
+
+def get_tname(tid):
+    return f"{ST_TRI}{tid:04d}"
 
 # -----------------------------------------------------------------------------
 #           SIMPLICIAL DATA HANDLING / PROCESSING / GENERATING
@@ -199,10 +221,10 @@ def gen_triangulation(x, y):
 
 
 def _log_data_row(data_row: pd.DataFrame) -> str:
-    return str(data_row.loc[:, data_row.columns != 'custmodata'])
+    return str(data_row.loc[:, data_row.columns != 'customdata'])
 
 
-def gen_points_data(points, color=COLORS[0]) -> dict:
+def gen_points_data(points, color=COLORS_DICT[SC_POINTS]) -> dict:
     """
         generating/populating ``main_data.points``
         :param points: tuple(x, y)
@@ -242,7 +264,7 @@ def gen_points_data(points, color=COLORS[0]) -> dict:
     # ----
     # the only "bad" thing is that we have ``customdata`` in the model data
     pts_data = dict(data=pts_df, plotly=pts_df,
-                    n=n, color=color, marker_size=6)
+                    n=n, color=color, marker_size=MARKER_SIZE)
     return pts_data
 
 
@@ -297,18 +319,18 @@ def gen_triangulation_df(points):
         A, B, C = pids
         # AB_x, AB_y = X[1] - X[0], Y[1] - Y[0]
         # BC_x, BC_y = X[2] - X[1], Y[2] - Y[0]
-        print(f">> orient >> {A} : {B} : {C}")
+        # print(f">> orient >> {A} : {B} : {C}")
         edges_x = AB_x, BC_x = X.iloc[1] - X.iloc[0], X.iloc[2] - X.iloc[1]
         edges_y = AB_y, BC_y = Y.iloc[1] - Y.iloc[0], Y.iloc[2] - Y.iloc[1]
 
         cross = np.cross(edges_x, edges_y)
         if cross < 0:  # anti-clockwise
             edges = [(A, B), (B, C), (C, A)]
-            print(f">> orient >> [Anti-CC] >> {edges}")
+            print(f">> orient >> ({A} : {B} : {C}) >> [Anti-CC] >> {edges}")
             return edges
         else:
             edges = [(A, C), (C, B), (B, A)]
-            print(f">> orient >> [CC] >> {edges}")
+            print(f">> orient >> ({A} : {B} : {C}) >> [CC] >> {edges}")
             return edges
         pass
 
@@ -347,7 +369,7 @@ def gen_triangulation_df(points):
                 sc_name=SC_MIDS[stype]
             ))
         ), ignore_index=True)
-        print(f">> add mid >> {mpid} >> {sname} >> {len(mdf.index)}")
+        # print(f">> add mid >> {mpid} >> {sname} >> {len(mdf.index)}")
         return mpid + 1, mpid, mdf
 
     points = points.set_index("id", drop=False)
@@ -382,7 +404,7 @@ def gen_triangulation_df(points):
             anti_edge = edge[::-1]
             if edge not in edges_df.index and anti_edge not in edges_df.index:
                 eid += 1
-                print(f">> no edge[{e}] >> {edge} >> eid={eid}")
+                # print(f">> no edge[{e}] >> {edge} >> eid={eid}")
                 edge_points = ABC.loc[list(edge)]
                 ename = f"{ST_EDGE}{eid:04d}"
                 emid_x, emid_y = calc_mid(edge_points["x"], edge_points["y"])
@@ -400,7 +422,7 @@ def gen_triangulation_df(points):
                 edge_dict["customdata"] = json.dumps(edge_customdata)
                 edge_row = pd.DataFrame(edge_dict, index=[(min(edge), max(edge))])
                 edges_df = edges_df.append(edge_row, ignore_index=False)
-                print(f">> new edge row >> edges.len={len(edges_df.index)} >> \n {_log_data_row(edge_row)}")
+                # print(f">> new edge row >> edges.len={len(edges_df.index)} >> \n {_log_data_row(edge_row)}")
 
                 tri_row[f"eid_{e}"] = eid
                 tri_row[f"ort_{e}"] = +1
@@ -409,23 +431,23 @@ def gen_triangulation_df(points):
                 # edge_row = edge_df.loc[[edge]] if edge in edge_df.index else edge_df.loc[[anti_edge]]
                 edge = edge if edge in edges_df.index else anti_edge
                 edge_row = edges_df.loc[[edge]]
-                print(f"\n>> edge[{e}] >> {edge} >> \n {_log_data_row(edge_row)}")
+                # print(f"\n>> edge[{e}] >> {edge} >> \n {_log_data_row(edge_row)}")
                 if not edge_row["cof_pos"][0] or edge_row["cof_neg"][0]:
                     raise Exception("cof_pos/neg", edge_row)
 
                 edge_customdata = json.loads(edge_row["customdata"][0])
-                edges_df.loc[[edge], "cof_neg"] = edge_customdata["cof_neg"] = tid
+                edges_df.loc[[edge], "cof_neg"] = edge_customdata["cof_neg"] = int(tid)
                 edges_df.loc[[edge], "cof_neg_type"] = edge_customdata["cof_neg_type"] = ST_TRI
                 edges_df.loc[[edge], "customdata"] = json.dumps(edge_customdata)
 
-                tri_row[f"eid_{e}"] = eid
+                tri_row[f"eid_{e}"] = int(edge_row["id"][0])
                 tri_row[f"ort_{e}"] = -1
         # end for(edges)
 
         # 2) meke/add triangle row
         tri_row["customdata"] = json.dumps(tri_row)
         tris_df = tris_df.append(tri_row, ignore_index=True)
-        print(f">> new tri row >> tid= {tid} >> tris_df.len= {len(edges_df.index)} >> \n {_log_data_row(edge_row)}")
+        # print(f">> new tri row >> tid= {tid} >> tris_df.len= {len(edges_df.index)} >> \n {_log_data_row(edge_row)}")
     # end for(tri.simplices)
 
     edges_df = edges_df.astype({"id": int,
@@ -444,6 +466,38 @@ def gen_triangulation_df(points):
                               "mid_point": int
                               }, copy=False)
     return edges_df, tris_df, mids_df
+
+
+def gen_boundary(tris: pd.DataFrame, tri_names: list) -> pd.DataFrame:
+    def boundary_row(eid=[], name=[], ort=[]):
+        return pd.DataFrame(dict(
+            id=eid, name=name, ort=ort
+        ), index=[eid])
+
+    boundary_df = boundary_row()
+
+    tris = tris.set_index('name', drop=False).loc[tri_names]
+    for index, tri in tris.iterrows():
+        for e in range(1, 4):
+            eid, ort = tri[f"eid_{e}"], tri[f"ort_{e}"]
+            ename = get_ename(eid)
+
+            if eid in boundary_df.index:
+                boundary_df.loc[eid, 'ort'] += ort
+            else:
+                boundary_df = pd.concat([
+                    boundary_df, boundary_row([int(eid)], [ename], [int(ort)])
+                ])
+
+            # eid_in_bd = eid in boundary_df.index
+            # erow = boundary_df.loc[[eid]] if eid_in_bd else boundary_row(int(eid), ename, int(0))
+            # erow.loc[eid, 'ort'] += ort
+            #
+            # boundary_df = boundary_df if eid_in_bd else pd.concat([boundary_df, erow])
+
+    boundary_df = boundary_df.loc[boundary_df.ort != 0]
+    boundary_df = boundary_df.astype(dict(id=int, ort=int))
+    return boundary_df
 
 
 def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
@@ -488,7 +542,7 @@ def gen_plotly_edges(points, edges, edge_colors=(COLORS_DICT[SC_EDGES], COLORS_D
 
 def gen_plotly_tris(points, tris, tri_colors=(COLORS_DICT[SC_TRIS], COLORS_DICT[SC_TRIS_MID])):
     tri_color, tri_mid_color = tri_colors
-    print(f"<<gen_plotly_tris>> : {tri_color, tri_mid_color}")
+    # print(f"<<gen_plotly_tris>> : {tri_color, tri_mid_color}")
 
     points = points.set_index("id", drop=False)
     plotly_tris = plotly_row()
@@ -619,10 +673,9 @@ def upd_trace_edges_mid(ids=None) -> go.Figure:
     return get_main_figure()
 
 
-def upd_trace_edges_hl(sc_name, hl_color, plotly_hl) -> go.Figure:
+def upd_trace_edges_hl(sc_name, plotly_hl, hl_color) -> go.Figure:
     global main_figure, main_data
     edges_data = main_data['edges']
-    # plotly_hl = edges_data['plotly_hl']
 
     main_figure.update_traces(dict(
         ids=plotly_hl['name'],
@@ -646,7 +699,7 @@ def upd_trace_tris(ids=None) -> go.Figure:
     main_figure.update_traces(dict(
         ids=plotly_tris['name'],
         x=plotly_tris['x'], y=plotly_tris['y'],
-        mode='lines',
+        mode='lines', marker=None,
         fill="toself", fillcolor=tris_data['color'], opacity=0.75,
         line_width=0,
         hovertext=[], hoverinfo="none"
@@ -677,6 +730,21 @@ def upd_trace_tris_mid(ids=None):
 
     tr_tris_mid = get_trace(SC_TRIS_MID)
     print(f"+++ upd tris mid +++ : {tr_tris_mid.mode} : {tr_tris_mid.x[0:3]}")
+    return get_main_figure()
+
+
+def upd_trace_tris_hl(plotly_hl, hl_color) -> go.Figure:
+    global main_figure, main_data
+    tris_data = main_data['tris']
+
+    main_figure.update_traces(dict(
+        ids=plotly_hl['name'],
+        x=plotly_hl['x'], y=plotly_hl['y'],
+        mode='lines', marker=None,
+        fill="toself", fillcolor=hl_color, opacity=0.5,
+        line_width=0,
+        hovertext=[], hoverinfo="none"
+    ), selector=dict(name=SC_TRIS_HL))
     return get_main_figure()
 
 
@@ -785,12 +853,17 @@ def triangulate(**kwargs) -> go.Figure:
     tri_colors = (tri_color, tri_mid_color)
 
     global main_figure, main_data
+    if 'data' not in main_data['points']:
+        return get_main_figure()
+
+    # TODO: should it be extracted into a new function?
     points_df = main_data['points']['data']
+    points_df = points_df[points_df['mid_point'].isna()]
     edges_df, tris_df, mids_df = gen_triangulation_df(points_df)
 
     main_data['points']['data'] = pd.concat([points_df, mids_df], ignore_index=True)
     points_df = main_data['points']['data']
-    # TODO: main_data['points']['plotly'] = points_df
+    # TODO: main_data['points']['plotly'] = points_df, because after prev line it is different from main_data['points']['data']
 
     plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df, edge_colors)
     main_data['edges'].update(dict(
@@ -851,15 +924,25 @@ def show_hide_points(stype) -> go.Figure:
     return get_main_figure()
 
 
+def highlight_points(pts_names: list, **kwargs) -> go.Figure:
+    """
+    Highlights points by increasing their size.
+        :param pts_names:
+        :param kwargs:
+        :return:
+    """
+    hl_mult = kwargs.get("hl_mult", 2)
 
-def highlight_points(pts_names:list, **kwargs) -> go.Figure:
     global main_figure, main_data
+    if 'plotly' not in main_data['points']:
+        return get_main_figure()
+
     pts_data = main_data['points']
     plotly_points = pts_data['plotly']
     plotly_points = plotly_points[plotly_points['mid_point'].isna()].set_index('name')
 
     marker_size = pd.Series([pts_data['marker_size']] * pts_data['n'], index=plotly_points.index)
-    marker_size.loc[pts_names] = pts_data['marker_size'] * 2
+    marker_size.loc[pts_names] = pts_data['marker_size'] * hl_mult
     main_figure.update_traces(dict(
         marker_size=marker_size
     ), selector=dict(name=SC_POINTS))
@@ -871,8 +954,8 @@ def highlight_edges(edge_names: list, **kwargs) -> go.Figure:
     """
     Highlights a set of edges with one color:
     all edges are taken with positive orientation
-        :param edge_names:
-        :param kwargs:
+        :param edge_names: edges to highlight
+        :param kwargs: hl_color, sc_name
         :return:
     """
     hl_color = kwargs.get("hl_color", COLORS_DICT[SC_EDGES_HL][0])
@@ -885,19 +968,67 @@ def highlight_edges(edge_names: list, **kwargs) -> go.Figure:
     plotly_edges = main_data['edges']['plotly']
     plotly_hl = gen_plotly_hl(edge_names, plotly_edges, hl_color)
 
-    clear_highlighting()
-    upd_trace_edges_hl(sc_name, hl_color, plotly_hl)
+    # clear_highlighting()
+    upd_trace_edges_hl(sc_name, plotly_hl, hl_color,)
 
     return get_main_figure()
 
 
+def highlight_triangles(tri_names: list, **kwargs) -> go.Figure:
+    """
+    Highlight a set of triangles
+        :param tri_names:
+        :param kwargs:
+        :return:
+    """
+    hl_color = kwargs.get("hl_color", COLORS_DICT[SC_TRIS_HL])
+
+    global main_figure, main_data
+    if 'plotly' not in main_data['tris']:
+        return get_main_figure()
+
+    plotly_tris = main_data['tris']['plotly']
+    plotly_hl = gen_plotly_hl(tri_names, plotly_tris, hl_color)
+
+    upd_trace_tris_hl(plotly_hl, hl_color)
+    highlight_boundary(tri_names)
+
+    return get_main_figure()
+
+
+def highlight_boundary(tri_names: list, **kwargs) -> go.Figure:
+    """
+    Highlights the border of a list of triangles
+        :param tri_names:
+        :param kwargs:
+        :return:
+    """
+    neg_color, pos_color = COLORS_DICT[SC_EDGES_NEG_HL], COLORS_DICT[SC_EDGES_HL][1]
+    is_Z_2 = kwargs.get("Z_2", False)
+
+    global main_figure, main_data
+    if 'data' not in main_data['tris']:
+        return get_main_figure()
+
+    tris_df = main_data['tris']['data']
+    boundary = gen_boundary(tris_df, tri_names)
+
+    pos_boundary = boundary.loc[boundary.ort == 1]
+    neg_boundary = boundary.loc[boundary.ort == -1]
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    print(f"tris= [{tri_names}]")
+    print("------------------------------------------")
+    print(f"### boundary ### \n {boundary}")
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+    highlight_edges(pos_boundary.name,
+                    hl_color=pos_color, sc_name=SC_EDGES_HL)
+    highlight_edges(neg_boundary.name,
+                    hl_color=neg_color, sc_name=SC_EDGES_NEG_HL)
+
+    return get_main_figure()
 
 
 # ------- wish list ----
-def highlight_tris():
-    pass
-
-
 def show_edge_orientations():
     pass
 

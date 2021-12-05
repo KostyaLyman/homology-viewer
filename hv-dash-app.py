@@ -66,6 +66,7 @@ scx.main_figure = scx.setup_fig(scx.main_layout)
 #                 )
 app = DashProxy(__name__,
                 external_stylesheets=[dbc.themes.FLATLY],
+                # external_stylesheets=[dbc.themes.VAPOR],
                 prevent_initial_callbacks=False,
                 transforms=[MultiplexerTransform()]
                 )
@@ -185,18 +186,19 @@ app.layout = html.Div([
             Input('main-radio', 'value')]
 )
 def display_click_data(clickData, selectData, reset_click, stype):
-    print(f"%%% select data %%% {type(selectData)}")
-    print(f"%%% select data %%% {selectData}")
+    print(f"%%% select data %%% {selectData and selectData['points']}")
     if selectData and selectData['points']:
-        # sname = selectData['points'][0]['id']
         snames = [pts['id'] for pts in selectData['points']]
-
-        if stype == scx.ST_EDGE:
-            # TODO: when there are selected points and radio switches to edges we get a list of p_names here
-            scx.highlight_edges(snames)
+        print(f"%%% select data %%% {snames}")
 
         if stype == scx.ST_POINT:
             scx.highlight_points(snames)
+
+        if stype == scx.ST_EDGE:
+            scx.highlight_edges(snames)
+
+        if stype == scx.ST_TRI:
+            scx.highlight_triangles(snames)
 
     else:
         scx.clear_highlighting()
@@ -212,13 +214,13 @@ def display_click_data(clickData, selectData, reset_click, stype):
 
 
 @app.callback(
-    output=Output('main-figure', 'figure'),
+    output=[Output('main-figure', 'figure'), Output('main-figure', 'selectedData')],
     inputs=Input('main-radio', 'value')
 )
 def radio_callback(radio_value):
     print(f"%%% radio %%% {radio_value}")
     scx.show_hide_points(radio_value)
-    return scx.get_main_figure()
+    return scx.get_main_figure(), dict(points=[])
 
 
 @app.callback(

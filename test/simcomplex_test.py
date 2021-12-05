@@ -30,18 +30,39 @@ class TestSimcomplex(unittest.TestCase):
         self.assertEqual(lim, (3, 4), "tuples of ints, a > b")
 
     def test_random_cloud(self):
-        scx.setup_fig()
+        # test data ---------------------------------------
         N_POINTS = 10
-        fig = scx.random_cloud(n=N_POINTS, xlim=11, ylim=(2, 5), color="red")
+        xlim = xmin, xmax = (0, 11)
+        ylim = ymin, ymax = (2, 5)
+
+        # test random cloud -------------------------------
+        scx.setup_fig()
+        fig = scx.random_cloud(n=N_POINTS, xlim=xmax, ylim=ylim, color="red")
         self.assertIsNotNone(fig, "fig is none")
-        self.assertEqual(fig.layout.xaxis.range, (0, 11))
-        self.assertEqual(fig.layout.yaxis.range, (2, 5))
+        self.assertEqual(xlim, fig.layout.xaxis.range, "xlim is wrong")
+        self.assertEqual(ylim, fig.layout.yaxis.range, "ylim is wrong")
 
         tr_points = scx.get_trace(scx.SC_POINTS)
         self.assertIsNotNone(tr_points, "trace is None")
-        self.assertEqual(N_POINTS, len(tr_points.x), "not all points are in trace")
+        self.assertEqual(N_POINTS, len(tr_points.ids), "not all points are in trace")
+        self.assertTrue((tr_points.x >= xmin).all(), "expecting: x >= xmin")
+        self.assertTrue((tr_points.x <= xmax).all(), "expecting: x <= xmax")
+        self.assertTrue((tr_points.y >= ymin).all(), "expecting: y >= ymin")
+        self.assertTrue((tr_points.y <= ymax).all(), "expecting: y <= ymax")
 
+        pts_data = scx.main_data['points']
+        self.assertIn('data', pts_data)
+        self.assertIn('plotly', pts_data)
+        
+        points = pts_data['data']
+        self.assertIsNotNone(points)
+        self.assertEqual(N_POINTS, len(points.index), "not all points are in points data")
+        self.assertTrue((points['x'] >= xmin).all(), "expecting: x >= xmin")
+        self.assertTrue((points['x'] <= xmax).all(), "expecting: x <= xmax")
+        self.assertTrue((points['y'] >= ymin).all(), "expecting: y >= ymin")
+        self.assertTrue((points['y'] <= ymax).all(), "expecting: y <= ymax")
 
+        pass
 
     def test_gen_triangulation_data_run(self):
         x = [0, 2, 0, 3]
@@ -74,42 +95,69 @@ class TestSimcomplex(unittest.TestCase):
 
 
     def test_triangulation_data_edges(self):
+        # points -------------------------------------------
         N_EDGES, N_TRIS, N_MIDS = 5, 2, 7
         x = [0, 2, 0, 3]
         y = [0, 0, 4, 1]
 
+        # setup -------------------------------------------
         pts_data = scx.gen_points_data((x, y))
         points_df = pts_data['data']
+
+        # triangulate -------------------------------------
         edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
-        self.assertEqual(len(edges_df.index), 5)
-        self.assertEqual(len(tris_df.index), 2)
-        self.assertEqual(len(mids_df.index), 7)
+        self.assertEqual(N_EDGES, len(edges_df.index), "number of edges is wrong")
+        self.assertEqual(N_TRIS, len(tris_df.index), "number of triangles is wrong")
+        self.assertEqual(N_MIDS, len(mids_df.index), "number of mid points is wrong")
 
         points_df = pd.concat([points_df, mids_df], ignore_index=True)
         points_df = points_df.set_index("id", drop=False)
+        tris_df = tris_df.set_index("id", drop=False)
+
+        # test edges df ------------------------------------
+        self.assertFalse((edges_df['cof_pos'] == 0).any(), "all cof_pos should be assigned")
+        self.assertTrue((edges_df['cof_neg'] != 0).any(), "there are cof_neg == None")
+        self.assertEqual(1, (edges_df['cof_neg'] != 0).sum(), "there is  one cof_neg != None")
 
         for index, edge in edges_df.iterrows():
-            print(f"idx={index}, edge_name={edge['name']}")
-            edge_id = edge['id']
-            edge_mp = edge['mid_point']
+            # test mid_points
+            eid, edge_mp = edge['id'], edge['mid_point']
             mp = points_df.loc[edge_mp]
-            mp_id = mp['id']
-            mp_mp = mp['mid_point']
-            print(f"edge: {edge[['id', 'mid_point']]}")
-            print(f"mids: {mp[['id', 'mid_point', 'mid_type']]}")
+            mid, mp_mp = mp['id'], mp['mid_point']
             self.assertIsNotNone(mp_mp, "mid_point doesn't have a mid_point pointer")
-            self.assertEqual(edge_mp, mp_id, "edge[mp] == mp[id]")
-            self.assertEqual(edge_id, mp_mp, "edge[id] == mp[mp]")
+            self.assertEqual(edge_mp, mid, "edge[mp] != mp[id]")
+            self.assertEqual(eid, mp_mp, "edge[id] != mp[mp]")
+
+            # test cofaces / orientations
+            cof_pos, cof_neg = edge['cof_pos'], edge['cof_neg']
+            cof_pos_type, cof_neg_type = edge['cof_pos_type'], edge['cof_neg_type']
+            self.assertIsNotNone(cof_pos, "positive coface always exists")
+            self.assertNotEqual(0, cof_pos, "positive coface always exists")
+            self.assertIsNotNone(cof_pos_type, "positive coface always exists")
+            self.assertEqual(scx.ST_TRI, cof_pos_type, "positive coface should be a triangle")
+
+            tri_pos = tris_df.loc[cof_pos]
+            tid_pos = tri_pos['id']
+            tri_eids = tri_pos[['eid_1', 'eid_2', 'eid_3']]
+            tri_orts = tri_pos[['ort_1', 'ort_2', 'ort_3']]
+            self.assertIn(eid, tri_eids.values, f"triangle[{tid_pos}] doesn't contain edge[{eid}]")
+            self.assertEqual(1, (tri_eids == eid).sum(), f"triangle[{tid_pos}] should have only one edge[{eid}]: {tri_eids}")
+            eid_indicator = (tri_eids == eid).values
+            self.assertEqual(1, tri_orts[eid_indicator][0], f"edge[{eid}] should be oriented positively in triangle[{tid_pos}]")
 
 
     def test_triangulation_data_tris(self):
+        # points -------------------------------------------
         N_EDGES, N_TRIS, N_MIDS = 5, 2, 7
         x = [0, 2, 0, 3]
         y = [0, 0, 4, 1]
+
+        # setup -------------------------------------------
         pts_data = scx.gen_points_data((x, y))
         points_df = pts_data['data']
-        edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
 
+        # triangulate -------------------------------------
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
         self.assertEqual(len(edges_df.index), N_EDGES, "number of edges in triangulation data is wrong")
         self.assertEqual(len(tris_df.index), N_TRIS, "number of triangles in triangulation data is wrong")
         self.assertEqual(len(mids_df.index), N_MIDS, "number of mid_points in triangulation data is wrong")
@@ -117,18 +165,62 @@ class TestSimcomplex(unittest.TestCase):
         points_df = pd.concat([points_df, mids_df], ignore_index=True)
         points_df = points_df.set_index("id", drop=False)
 
+        # test tris df ------------------------------------
         for index, tri in tris_df.iterrows():
-            print(f"idx={index}, tri_name={tri['name']}")
-            tri_id = tri['id']
-            tri_mp = tri['mid_point']
+            tid, tri_mp = tri['id'], tri['mid_point']
             mp = points_df.loc[tri_mp]
-            mp_id = mp['id']
-            mp_mp = mp['mid_point']
-            print(f"tri: {tri[['id', 'mid_point']]}")
-            print(f"mids: {mp[['id', 'mid_point', 'mid_type']]}")
+            mid, mp_mp = mp['id'], mp['mid_point']
             self.assertIsNotNone(mp_mp, "mid_point doesn't have a mid_point pointer")
-            self.assertEqual(tri_mp, mp_id, "edge[mp] == mp[id]")
-            self.assertEqual(tri_id, mp_mp, "edge[id] == mp[mp]")
+            self.assertEqual(tri_mp, mid, "edge[mp] == mp[id]")
+            self.assertEqual(tid, mp_mp, "edge[id] == mp[mp]")
+
+
+    def test_gen_boundary(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 5, 8, 4
+        x = [0, 2, 0, 3, 4]
+        y = [0, 0, 4, 1, -2]
+
+        # setup / triangulate ------------------------------
+        pts_data = scx.gen_points_data((x, y))
+        points_df = pts_data['data']
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
+        points_df = pd.concat([points_df, mids_df], ignore_index=True)
+
+        # test: no overlapping edges ----------------------
+        test_tris = ["t0001", "t0004"]
+        # expected_boundary = {"e0001", "e0002", "e0003", "e0004", "e0006", "e0008"}
+        expected_boundary = {
+            "e0001": 1, "e0002": 1, "e0003": 1, "e0004": -1, "e0006": -1, "e0008": 1
+        }
+        boundary = scx.gen_boundary(tris_df, test_tris)
+        self.assertEqual(len(expected_boundary), len(boundary.index),
+                         "number of edges in the boundary[t1-t4] is wrong")
+        self.assertFalse((boundary.ort == 0).any(),
+                         "an edge with ort=0 is in the boundary[t1-t4]")
+        self.assertFalse(set(expected_boundary.keys()).symmetric_difference(set(boundary['name'])),
+                         "there are some unexpected edges in the boundary[t1-t4]")
+        self.assertTrue((abs(boundary.ort) == 1).all(),
+                        "edges from boundary[t1-t4] should have coefs == ±1")
+        self.assertCountEqual(expected_boundary.values(), boundary.ort,
+                              "orientation of boundary edges is wrong")
+
+        # test: with overlapping edges --------------------
+        test_tris = ["t0003", "t0001"]
+        expected_boundary = {
+            "e0002": 1, "e0003": 1, "e0006": 1, "e0007": 1
+        }
+        boundary = scx.gen_boundary(tris_df, test_tris)
+        self.assertEqual(len(expected_boundary), len(boundary.index),
+                         "number of edges in the boundary[t1-t3] is wrong")
+        self.assertFalse((boundary.ort == 0).any(),
+                         "an edge with ort=0 is in the boundary[t1-t3]")
+        self.assertFalse(set(expected_boundary.keys()).symmetric_difference(set(boundary['name'])),
+                         "there are some unexpected edges in the boundary[t1-t3]")
+        self.assertTrue((boundary.ort == 1).all(),
+                        "edges from boundary[t1-t3] should have all coefs == +1")
+        self.assertCountEqual(expected_boundary.values(), boundary.ort,
+                              "orientation of boundary edges is wrong")
 
 
     def test_plotly_edges(self):
@@ -170,16 +262,19 @@ class TestSimcomplex(unittest.TestCase):
 
 
     def test_plotly_hl_edges(self):
+        # points -------------------------------------------
         N_EDGES = 5
         x = [0, 2, 0, 3]
         y = [0, 0, 4, 1]
+
+        # setup / triangulate ------------------------------
         pts_data = scx.gen_points_data((x, y))
         points_df = pts_data['data']
         edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
         points_df = pd.concat([points_df, mids_df], ignore_index=True)
         plotly_edges, plotly_edges_mid = scx.gen_plotly_edges(points_df, edges_df)
 
-        # regular call
+        # test: regular call
         test_edges = ['e0002', 'e0004']
         hl_color = "red"
         hl_colors = [hl_color] * len(test_edges) * 3
@@ -190,15 +285,18 @@ class TestSimcomplex(unittest.TestCase):
         self.assertCountEqual(np.repeat(test_edges, 3), plotly_hl['name'])
         self.assertCountEqual(hl_colors, plotly_hl["color"], "colors are wrong")
 
-        # empty call
+        # test: empty call
         plotly_hl = scx.gen_plotly_hl([], plotly_edges, hl_color)
         self.assertTrue(plotly_hl.empty)
 
 
     def test_plotly_hl_tris(self):
+        # points -------------------------------------------
         N_TRIS = 4
         x = [0, 2, 0, 3, 4]
         y = [0, 0, 4, 1, -2]
+
+        # setup / triangulate ------------------------------
         pts_data = scx.gen_points_data((x, y))
         points_df = pts_data['data']
         edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
@@ -308,8 +406,31 @@ class TestSimcomplex(unittest.TestCase):
         scx.show_hide_points('none')
         test_hidden_except_of('none')
 
+    def test_highlight_points(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS, N_MIDS = 4, 5, 2, 7
+        x = [0, 2, 0, 3]
+        y = [0, 0, 4, 1]
 
-    def test_highlight_edges(self):
+        # setup /triangulate ------------------------------
+        scx.setup_fig()
+        pts_upd = scx.gen_points_data((x, y))
+        scx.main_data['points'].update(pts_upd)
+        scx.triangulate()
+
+        # test --------------------------------------------
+        test_points = ["p0002", "p0004"]
+        hl_mult = 3
+        expected_marker_sizes = [scx.MARKER_SIZE, scx.MARKER_SIZE * hl_mult] * 2
+
+        scx.highlight_points(test_points, hl_mult=hl_mult)
+
+        tr_points = scx.get_trace(scx.SC_POINTS)
+        self.assertIsNotNone(tr_points, "trace is None")
+        self.assertCountEqual(expected_marker_sizes, tr_points.marker.size, "wrong sizes")
+        pass
+
+    def test_highlight_edges_std(self):
         # points -------------------------------------------
         N_POINTS, N_EDGES, N_TRIS, N_MIDS = 4, 5, 2, 7
         x = [0, 2, 0, 3]
@@ -339,8 +460,21 @@ class TestSimcomplex(unittest.TestCase):
         tr_tris_hl = scx.get_trace(scx.SC_TRIS_HL)
         self.assertIsNotNone(tr_tris_hl, "no trace")
         self.assertFalse(tr_tris_hl.x, "extra highlighting")
+        pass
 
-        # test: different sc ------------------------------
+    def test_highlight_edges_neg(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS, N_MIDS = 4, 5, 2, 7
+        x = [0, 2, 0, 3]
+        y = [0, 0, 4, 1]
+
+        # setup /triangulate ------------------------------
+        scx.setup_fig()
+        pts_upd = scx.gen_points_data((x, y))
+        scx.main_data['points'].update(pts_upd)
+        scx.triangulate()
+
+        # test: neg_hl sc ---------------------------------------
         test_edges = ["e0001", "e0004", "e0003"]
         test_sc = scx.SC_EDGES_NEG_HL
         hl_color = "blue"
@@ -348,8 +482,8 @@ class TestSimcomplex(unittest.TestCase):
 
         tr_edges_hl = scx.get_trace(scx.SC_EDGES_HL)
         self.assertIsNotNone(tr_edges_hl, "no trace")
-        # self.assertFalse(tr_edges_hl.x, "extra highlighting")
-        self.assertCountEqual([], tr_edges_hl.x, "extra highlighting")
+        self.assertFalse(tr_edges_hl.x, "extra highlighting")
+        # self.assertCountEqual([], tr_edges_hl.x, "extra highlighting")
 
         tr_edges_neg_hl = scx.get_trace(scx.SC_EDGES_NEG_HL)
         self.assertIsNotNone(tr_edges_neg_hl, "no trace")
@@ -362,8 +496,86 @@ class TestSimcomplex(unittest.TestCase):
         self.assertIsNotNone(tr_tris_hl, "no trace")
         self.assertFalse(tr_tris_hl.x, "extra highlighting")
 
+        pass
 
-    def test_clear_highlighting(self):
+    def test_highlight_triangles(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 5, 8, 4
+        x = [0, 2, 0, 3, 4]
+        y = [0, 0, 4, 1, -2]
+
+        # setup / triangulate ------------------------------
+        pts_data = scx.gen_points_data((x, y))
+        points_df = pts_data['data']
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(points_df)
+        points_df = pd.concat([points_df, mids_df], ignore_index=True)
+
+        pass
+
+    def test_highlight_boundary_no_overlap(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 5, 8, 4
+        x = [0, 2, 0, 3, 4]
+        y = [0, 0, 4, 1, -2]
+
+        # setup / triangulate ------------------------------
+        scx.setup_fig()
+        pts_upd = scx.gen_points_data((x, y))
+        scx.main_data['points'].update(pts_upd)
+        scx.triangulate()
+
+        # test: no overlapping edges ----------------------
+        test_tris = ["t0001", "t0004"]
+        expected_boundary = {
+            "e0001": 1, "e0002": 1, "e0003": 1, "e0004": -1, "e0006": -1, "e0008": 1
+        }
+        scx.highlight_boundary(test_tris)
+
+        tr_pos_hl = scx.get_trace(scx.SC_EDGES_HL)
+        pos_bd = np.repeat([ename for ename, ort in expected_boundary.items() if ort == 1], 3)
+        self.assertIsNotNone(tr_pos_hl, "no trace")
+        self.assertEqual(len(pos_bd), len(tr_pos_hl.ids), "not all pos_boundary edges are highlighted")
+        self.assertCountEqual(pos_bd, tr_pos_hl.ids, "not all pos_boundary edges are highlighted")
+
+        tr_neg_hl = scx.get_trace(scx.SC_EDGES_NEG_HL)
+        neg_bd = np.repeat([ename for ename, ort in expected_boundary.items() if ort != 1], 3)
+        self.assertIsNotNone(tr_neg_hl, "no trace")
+        self.assertEqual(len(neg_bd), len(tr_neg_hl.ids), "not all neg_boundary edges are highlighted")
+        self.assertCountEqual(neg_bd, tr_neg_hl.ids, "not all neg_boundary edges are highlighted")
+        pass
+
+    def test_highlight_boundary_with_overlap(self):
+        # points -------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 5, 8, 4
+        x = [0, 2, 0, 3, 4]
+        y = [0, 0, 4, 1, -2]
+
+        # setup / triangulate ------------------------------
+        scx.setup_fig()
+        pts_upd = scx.gen_points_data((x, y))
+        scx.main_data['points'].update(pts_upd)
+        scx.triangulate()
+
+        # test: with overlapping edges --------------------
+        test_tris = ["t0003", "t0001"]
+        expected_boundary = {
+            "e0002": 1, "e0003": 1, "e0006": 1, "e0007": 1
+        }
+        scx.highlight_boundary(test_tris)
+
+        tr_pos_hl = scx.get_trace(scx.SC_EDGES_HL)
+        pos_bd = np.repeat([ename for ename, ort in expected_boundary.items() if ort == 1], 3)
+        self.assertIsNotNone(tr_pos_hl, "no trace")
+        self.assertEqual(len(pos_bd), len(tr_pos_hl.ids), "not all pos_boundary edges are highlighted")
+        self.assertCountEqual(pos_bd, tr_pos_hl.ids, "not all pos_boundary edges are highlighted")
+
+        tr_neg_hl = scx.get_trace(scx.SC_EDGES_NEG_HL)
+        # no negative edges in boundary
+        self.assertIsNotNone(tr_neg_hl, "no trace")
+        self.assertEqual(0, len(tr_neg_hl.ids), "some neg_boundary edges are highlighted")
+        pass
+
+    def test_clear_highlighting_after_edges(self):
         # points -------------------------------------------
         N_POINTS, N_EDGES, N_TRIS, N_MIDS = 4, 5, 2, 7
         x = [0, 2, 0, 3]
@@ -375,11 +587,11 @@ class TestSimcomplex(unittest.TestCase):
         scx.main_data['points'].update(pts_upd)
         scx.triangulate()
 
-        # highlight edges ---------------------------------
+        # highlight edges: std ----------------------------
         test_edges = ["e0002", "e0004"]
         scx.highlight_edges(test_edges)
 
-        # test --------------------------------------------
+        # test
         scx.clear_highlighting()
 
         tr_edges_hl = scx.get_trace(scx.SC_EDGES_HL)
@@ -394,6 +606,26 @@ class TestSimcomplex(unittest.TestCase):
         self.assertIsNotNone(tr_tris_hl, "no tris_hl")
         self.assertCountEqual([], tr_tris_hl.ids, "some edges are still highlighted")
 
+        # highlight edges: neg ----------------------------
+        test_edges = ["e0001", "e0004", "e0003"]
+        hl_color = "blue"
+        scx.highlight_edges(test_edges, hl_color=hl_color, sc_name=scx.SC_EDGES_NEG_HL)
+
+        # test
+        scx.clear_highlighting()
+
+        tr_edges_hl = scx.get_trace(scx.SC_EDGES_HL)
+        self.assertIsNotNone(tr_edges_hl, "no edges_hl")
+        self.assertCountEqual([], tr_edges_hl.ids, "some edges are still highlighted")
+
+        tr_edges_neg_hl = scx.get_trace(scx.SC_EDGES_NEG_HL)
+        self.assertIsNotNone(tr_edges_neg_hl, "no edges_neg_hl")
+        self.assertCountEqual([], tr_edges_neg_hl.ids, "some edges are still highlighted")
+
+        tr_tris_hl = scx.get_trace(scx.SC_TRIS_HL)
+        self.assertIsNotNone(tr_tris_hl, "no tris_hl")
+        self.assertCountEqual([], tr_tris_hl.ids, "some edges are still highlighted")
+        pass
 
 if __name__ == '__main__':
     unittest.main()
