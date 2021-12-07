@@ -367,7 +367,7 @@ def gen_triangulation_df(points):
         return length
 
     def add_mid_point(mdf, mpid, x, y, sid, stype):
-        if stype not in MID_TYPES:
+        if stype not in SC_MIDS.keys():
             raise Exception("wrong simplex type", stype)
 
         sname = f"{stype}{sid:04d}"
@@ -501,12 +501,6 @@ def gen_boundary(tris: pd.DataFrame, tri_names: list) -> pd.DataFrame:
                 boundary_df = pd.concat([
                     boundary_df, boundary_row([int(eid)], [ename], [int(ort)])
                 ])
-
-            # eid_in_bd = eid in boundary_df.index
-            # erow = boundary_df.loc[[eid]] if eid_in_bd else boundary_row(int(eid), ename, int(0))
-            # erow.loc[eid, 'ort'] += ort
-            #
-            # boundary_df = boundary_df if eid_in_bd else pd.concat([boundary_df, erow])
 
     boundary_df = boundary_df.loc[boundary_df.ort != 0]
     boundary_df = boundary_df.astype(dict(id=int, ort=int))
@@ -642,6 +636,7 @@ def upd_trace_points(ids=None) -> go.Figure:
     return get_main_figure()
 
 
+# noinspection PyTypeChecker
 def upd_trace_edges(ids=None) -> go.Figure:
     global main_figure, main_data
     edges_data = main_data['edges']
@@ -906,58 +901,32 @@ def triangulate(**kwargs) -> go.Figure:
     return get_main_figure()
 
 
-def get_show_hide_sc(stype):
-    if stype == ST_POINT:  # turn off all mid-points
-        sc_on = SC_POINTS
-        sc_off = list(SC_MIDS.values())
-
-    elif stype in MID_TYPES:  # turn off all except a stype's mid point
-        sc_on = SC_MIDS[stype]
-        sc_off = [SC_POINTS] + [sc for sc in SC_MIDS.values() if sc != sc_on]
-
-    else:  # turn off everything
-        sc_on = None
-        sc_off = [SC_POINTS] + list(SC_MIDS.values())
-    return sc_off, sc_on
 
 
-def show_hide_points(stype) -> go.Figure:
+def show_hide_points(stype, mode='visibility') -> go.Figure:
     """
     Shows  points/mid_points associated with ``stype``,
     hides the rest, by changing trace.visible = True/False
-        :param stype:
+        :param stype: ST_POINT OR MID_TYPES(EDGE, TRI, HOLE)
+        :param mode: 'visibility' or 'opacity' / 'v' or 'o'
         :return:
     """
-    global main_figure, main_data
+    # inner functions -------------------------------------
+    def get_show_hide_sc(stype):
+        if stype == ST_POINT:  # turn off all mid-points
+            sc_on = SC_POINTS
+            sc_off = list(SC_MIDS.values())
 
-    def set_visibility(sc_name, visible):
-        if sc_name:
-            main_figure.update_traces(dict(
-                visible=visible
-            ), selector=dict(name=sc_name))
+        elif stype in SC_MIDS.keys():  # turn off all except a stype's mid point
+            sc_on = SC_MIDS[stype]
+            sc_off = [SC_POINTS] + [sc for sc in SC_MIDS.values() if sc != sc_on]
 
-    sc_off, sc_on = get_show_hide_sc(stype)
+        else:  # turn off everything
+            sc_on = None
+            sc_off = [SC_POINTS] + list(SC_MIDS.values())
+        return sc_off, sc_on
 
-    # turn off highlights too
-    clear_highlighting()
-
-    # turn traces on/off
-    set_visibility(sc_on, True)
-    for sc in sc_off:
-        set_visibility(sc, False)
-
-    return get_main_figure()
-
-
-def show_obscure_points(stype) -> go.Figure:
-    """
-    Shows points/mid_points associated with ``stype``,
-    hides the rest, by changing marker_opacity = CONFIG['opacity']/0
-        :param stype:
-        :return:
-    """
-    global main_figure, main_data
-
+    # TODO: when config is implemented, do something with this..
     sc_opacities = {
         SC_POINTS: 1,
         SC_EDGES_MID: MID_CONFIG['opacity'],
@@ -965,26 +934,34 @@ def show_obscure_points(stype) -> go.Figure:
         SC_HOLES: MID_CONFIG['opacity']
     }
 
-    def set_opacities(sc_names, visible):
-        if not sc_names:
-            return
-
-        sc_names = sc_names if type(sc_names) == list else [sc_names]
-        for sc_name in sc_names:
+    def set_opacity(sc_name, visible):
+        if sc_name:
             opacity = sc_opacities[sc_name] if visible else 0
             main_figure.update_traces(dict(
                 marker_opacity=opacity
             ), selector=dict(name=sc_name))
 
+    def set_visibility(sc_name, visible):
+        if sc_name:
+            main_figure.update_traces(dict(
+                visible=visible
+            ), selector=dict(name=sc_name))
+
+    # show / hide functions -------------------------------
+    modes = dict(
+        opacity=(lambda sn: set_opacity(sn, True), lambda sn: set_opacity(sn, False)),
+        visibility=(lambda sn: set_visibility(sn, True), lambda sn: set_visibility(sn, False))
+    )
+    modes['o'], modes['v'] = modes['opacity'], modes['visibility']
+
+    # show / hide logic -----------------------------------
+    global main_figure, main_data
+    show, hide = modes[mode]
     sc_off, sc_on = get_show_hide_sc(stype)
 
-    # turn off highlights too
-    clear_highlighting()
-
-    # turn traces on/off
-    set_opacities(sc_on, True)
+    show(sc_on)
     for sc in sc_off:
-        set_opacities(sc, False)
+        hide(sc)
 
     return get_main_figure()
 

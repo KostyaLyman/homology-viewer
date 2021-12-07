@@ -362,10 +362,10 @@ class TestSimcomplex(unittest.TestCase):
         self.assertEqual(N_TRIS, len(tr_tris_mid.x), "not all tris_mid are in the trace")
         self.assertIsNotNone(tr_tris_mid.customdata, "no customdata on tris mids")
 
-    def test_show_hide_points(self):
+    def test_show_hide_points_visibility(self):
         # setup / constants -------------------------------
-        msg_visible = "Test[{test}] : <{sc}> should visible"
-        msg_hidden = "Test[{test}] : <{sc}> should visible"
+        msg_visible = "Test[{test}] : <{sc}> should be visible"
+        msg_hidden = "Test[{test}] : <{sc}> should be hidden"
         sc_show = {
             scx.ST_POINT: scx.SC_POINTS,
             scx.ST_EDGE: scx.SC_EDGES_MID,
@@ -388,22 +388,66 @@ class TestSimcomplex(unittest.TestCase):
                 self.assertFalse(tr.visible, msg_hidden.format(test=test_st, sc=sc))
 
         # test: points
-        scx.show_hide_points(scx.ST_POINT)
+        scx.show_hide_points(scx.ST_POINT, mode='visibility')
         test_visible(scx.ST_POINT)
         test_hidden_except_of(scx.ST_POINT)
 
         # test: edges
-        scx.show_hide_points(scx.ST_EDGE)
+        scx.show_hide_points(scx.ST_EDGE, mode='visibility')
         test_visible(scx.ST_EDGE)
         test_hidden_except_of(scx.ST_EDGE)
 
         # test: tris
-        scx.show_hide_points(scx.ST_TRI)
+        scx.show_hide_points(scx.ST_TRI, mode='visibility')
         test_visible(scx.ST_TRI)
         test_hidden_except_of(scx.ST_TRI)
 
         # test: none
-        scx.show_hide_points('none')
+        scx.show_hide_points('none', mode='visibility')
+        test_hidden_except_of('none')
+
+    def test_show_hide_points_opacity(self):
+        # setup / constants -------------------------------
+        msg_visible = "Test[{test}] : <{sc}> should be visible"
+        msg_hidden = "Test[{test}] : <{sc}> should be hidden"
+        sc_show = {
+            scx.ST_POINT: scx.SC_POINTS,
+            scx.ST_EDGE: scx.SC_EDGES_MID,
+            scx.ST_TRI: scx.SC_TRIS_MID,
+        }
+
+        scx.setup_fig()
+
+        # test routines -----------------------------------
+        def test_visible(test_st):
+            sc_on = sc_show[test_st]
+            tr_on = scx.get_trace(sc_on)
+            self.assertIsNotNone(tr_on, "trace is None")
+            self.assertTrue(tr_on.marker.opacity, msg_visible.format(test=test_st, sc=sc_on))
+
+        def test_hidden_except_of(test_st):
+            sc_off = [sc for st, sc in sc_show.items() if st != test_st]
+            tr_off = scx.get_traces(sc_off)
+            for tr, sc in zip(tr_off, sc_off):
+                self.assertFalse(tr.marker.opacity, msg_hidden.format(test=test_st, sc=sc))
+
+        # test: points
+        scx.show_hide_points(scx.ST_POINT, mode='opacity')
+        test_visible(scx.ST_POINT)
+        test_hidden_except_of(scx.ST_POINT)
+
+        # test: edges
+        scx.show_hide_points(scx.ST_EDGE, mode='o')
+        test_visible(scx.ST_EDGE)
+        test_hidden_except_of(scx.ST_EDGE)
+
+        # test: tris
+        scx.show_hide_points(scx.ST_TRI, mode='opacity')
+        test_visible(scx.ST_TRI)
+        test_hidden_except_of(scx.ST_TRI)
+
+        # test: none
+        scx.show_hide_points('none', mode='opacity')
         test_hidden_except_of('none')
 
     def test_highlight_points(self):

@@ -222,9 +222,9 @@ def display_click_data(clickData, selectData, reset_click, stype):
 )
 def radio_callback(radio_value):
     print(f"%%% radio %%% {radio_value}")
-    # scx.clear_highlighting()
-    # scx.show_hide_points(radio_value)
-    scx.show_obscure_points(radio_value)
+    scx.clear_highlighting()
+    scx.show_hide_points(radio_value, mode='opacity')
+    # scx.show_obscure_points(radio_value)
     return scx.get_main_figure(), dict(points=[])
 
 
