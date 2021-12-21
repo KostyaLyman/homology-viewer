@@ -47,15 +47,15 @@ SIMPLEX_TYPES = ST_POINT, ST_EDGE, ST_TRI, ST_HOLE = ("p", "e", "t", "h")
 SC_POINTS = 'sc_points'
 SC_EDGES, SC_EDGES_MID, SC_EDGES_HL, SC_EDGES_NEG_HL = 'sc_edges', 'sc_edges_mid', 'sc_edges_hl', 'sc_edges_neg_hl'
 SC_TRIS, SC_TRIS_MID, SC_TRIS_HL = 'sc_tris', 'sc_tris_mid', 'sc_tris_hl'
-SC_HOLES = "sc_holes"
+SC_HOLES, SC_HOLES_MID, SC_HOLES_HL = "sc_holes", "sc_holes_mid", "sc_holes_hl"
 
 SC_TRACES = \
     SC_POINTS, \
     SC_EDGES, SC_EDGES_MID, SC_EDGES_HL, SC_EDGES_NEG_HL, \
     SC_TRIS, SC_TRIS_MID, SC_TRIS_HL, \
-    SC_HOLES
+    SC_HOLES, SC_HOLES_MID, SC_HOLES_HL
 
-SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID, ST_HOLE: SC_HOLES}
+SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID, ST_HOLE: SC_HOLES_MID}
 MID_TYPES = SC_MIDS.keys()
 MID_CONFIG = dict(marker_size=10, opacity=0.3)
 
@@ -63,17 +63,26 @@ MID_CONFIG = dict(marker_size=10, opacity=0.3)
 COLORS = ['rgba(235, 52, 134, 1)', 'rgba(39, 53, 150, 1)', 'rgba(235, 174, 52, 1)']
 COLORS_DICT = {
     SC_POINTS: 'rgba(25, 72, 94, 1)',           # hsl = 199°, 58%, 23%
+
     SC_EDGES: 'rgba(39, 53, 150, 1)',           # hsl = 232°, 59%, 37%
     SC_EDGES_MID: 'rgba(39, 53, 150, 1)',       # hsl = 232°, 59%, 37%
-    SC_TRIS: 'rgba(235, 174, 52, 1)',           # hsl = 40°, 82%, 56%
-    SC_TRIS_MID: 'rgba(49, 33, 2, 1)',          # hsl = 40°, 92%, 10%
     SC_EDGES_HL: ('rgba(39, 53, 150, 1)', 'rgba(14, 153, 21, 1)'),  # (neutral, pos) = hue(232°, 123°)
     SC_EDGES_NEG_HL: 'rgba(199, 44, 181, 1)',   # hsl = 307°, 64%, 48%
-    SC_TRIS_HL: 'rgba(168, 63, 19, 1)'          # hsl = 18°, 80%, 37%
+
+    SC_TRIS: 'rgba(235, 174, 52, 1)',           # hsl = 40°, 82%, 56%
+    SC_TRIS_MID: 'rgba(49, 33, 2, 1)',          # hsl = 40°, 92%, 10%
+    SC_TRIS_HL: 'rgba(168, 63, 19, 1)',         # hsl = 18°, 80%, 37%
+
+    SC_HOLES: 'rgba(156, 28, 169, 1)',          # hsl = 295°, 84%, 66%
+    SC_HOLES_MID: 'rgba(212, 23, 231, 1)',      # hsl = 295°, --------
+    SC_HOLES_HL: 'rgba(138, 85, 192, 1)',       # hsl = 270°, --------
+
+
 }
 
 # model
 EMPTY_DATA = dict(
+    holes=dict(sc_names=[SC_HOLES, SC_HOLES_HL, SC_HOLES_MID]),
     tris=dict(sc_names=[SC_TRIS, SC_TRIS_HL, SC_TRIS_MID]),
     edges=dict(sc_names=[SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID]),
     points=dict(sc_names=[SC_POINTS])
@@ -123,10 +132,31 @@ def get_ename(eid):
     ename = f"{ST_EDGE}{eid:04d}"
     return ename
 
+def get_enames(eids):
+    # enames = []
+    # for eid in eids:
+    #     # TODO: rewrite without loop (apply, reduce, map)
+    #     ename = f"{ST_EDGE}{eid:04d}"
+    #     enames.append(ename)
+    enames = list(map(get_ename, eids))
+    return enames
+
 def get_tname(tid):
     tname = f"{ST_TRI}{tid:04d}"
     return tname
 
+def get_hname(hid):
+    hname = f"{ST_HOLE}{hid:04d}"
+    return hname
+
+def parse_sname(name):
+    try:
+        stype = get_stype(name)
+        sid = int(name[1:])
+    except:
+        stype, sid = None, 0
+    finally:
+        return stype, sid
 
 # -----------------------------------------------------------------------------
 #               GETTER / SETTER
@@ -143,7 +173,7 @@ def get_main_data() -> dict:
 
 def get_data(stype) -> dict:
     global main_data
-    skey = {ST_POINT: 'points', ST_EDGE: 'edges', ST_TRI: 'tris'}[stype]
+    skey = {ST_POINT: 'points', ST_EDGE: 'edges', ST_TRI: 'tris', ST_HOLE: 'holes'}[stype]
     return main_data[skey]
 
 
@@ -191,7 +221,7 @@ def setup_fig(layout=main_layout) -> go.Figure:
 def clear_highlighting() -> go.Figure:
     global main_figure, main_data
 
-    for sc_hl in (SC_EDGES_HL, SC_EDGES_NEG_HL, SC_TRIS_HL):
+    for sc_hl in (SC_EDGES_HL, SC_EDGES_NEG_HL, SC_TRIS_HL, SC_HOLES_HL):
         main_figure.update_traces(dict(
             ids=[], x=[], y=[], line_color=None
         ), selector=dict(name=sc_hl))
@@ -227,15 +257,18 @@ def gen_random_points(n, xlim=(0, 1), ylim=(0, 1), padding=0.05):
     return x, y
 
 
-def gen_triangulation(x, y):
-    points = np.array([x, y])
-    tri = Delaunay(points)
-    return tri
-
-
 def _log_data_row(data_row: pd.DataFrame) -> str:
     return str(data_row.loc[:, data_row.columns != 'customdata'])
 
+
+def points_row(pid=[], pname=[], x=[], y=[], mp_pointer=[], mp_type=[], color=[], customdata=[]):
+    return pd.DataFrame(dict(
+        id=pid, name=pname,                             # plotly_row
+        x=x, y=y,                                       # plotly_row
+        mp_pointer=mp_pointer, mp_type=mp_type,
+        color=color,                                    # plotly_row
+        customdata=customdata,                          # plotly_row
+        ), index=[pname])
 
 def gen_points_data(points, color=COLORS_DICT[SC_POINTS]) -> dict:
     """
@@ -254,14 +287,7 @@ def gen_points_data(points, color=COLORS_DICT[SC_POINTS]) -> dict:
             for pid in pids
         ]
 
-        df = pd.DataFrame(dict(
-            id=pids, name=pnames,            # plotly_row
-            x=x, y=y,                        # plotly_row
-            color=colors,                    # plotly_row
-            customdata=customdata,           # plotly_row
-            mid_point=None, mid_type=None
-            # ), index=pids)
-        ))
+        df = points_row(pids, pnames, x, y, None, None, colors, customdata)
         return df
 
     # -------------
@@ -269,41 +295,39 @@ def gen_points_data(points, color=COLORS_DICT[SC_POINTS]) -> dict:
     n = len(x)
     print(f"+++ gen_points: n={n}, x0={x[0]:.3f}, y0={y[0]:.3f}")
 
-    pts_df = gen_points_df(x, y, n, color)
+    points_df = gen_points_df(x, y, n, color)
 
     # in case of points there is no difference between
     # the model data of points
     # the plotly data (required to make a scatter)
     # ----
     # the only "bad" thing is that we have ``customdata`` in the model data
-    pts_data = dict(data=pts_df, plotly=pts_df,
+    points_data = dict(data=points_df, plotly=points_df,
                     n=n, color=color, marker_size=MARKER_SIZE)
-    return pts_data
+    return points_data
 
 
-def gen_triangulation_df(points):
+def gen_triangulation_df(simplices, points_df):
     """
     Triangulates the point cloud in ``points``
     and generates ``edge_dict`` and ``tri_dict`` data
-        :param points: data frame[id, x, y]
+        :param points_df: data frame[id, x, y]
         :return: (edge_df, tri_df, mid_points_df)
     """
-    tri = Delaunay(points[["x", "y"]])
-    print(f"tri: {len(tri.simplices)}")
-
-    # edge_df -> plotly_edges[id=eid], plotly_edge_midpoints[id=eid]
+    # TODO: maybe it makes sense to introduce a class for (sid, sname)?
     edges_df = pd.DataFrame(dict(
         id=[],                              # edge id
         name=[],                            # edge name: e0012, e0034
         pid_1=[], pid_2=[],                 # pids of endpoints: order?
-        cof_pos=[], cof_neg=[],             # coface id (triangle/hole) where this edge is positive / negative
-        cof_pos_type=[], cof_neg_type=[],   # coface type: triangle or hole
+        cof_pos=[], cof_neg=[],             # coface ``name`` where this edge is positive / negative
+        cof_pos_type=[], cof_neg_type=[],   # coface type: triangle or hole or None
+        # if the edge is on the outer boundary
+        # then: cof = None, cof_type = None   <-- ints cannot be None
         mid_point=[],                       # pid of midpoints
         length=[],                          # euclidean length : np.linalg.norm(v)
         customdata=[]
     ))
 
-    # tri_df -> plotly_tris[id=tid], plotly_tri_midpoints[id=tid]
     tris_df = pd.DataFrame(dict(
         id=[],                         # triangle id
         name=[],                       # triangle name: t0045, t0123
@@ -315,11 +339,8 @@ def gen_triangulation_df(points):
         customdata=[]
     ))
 
-    mids_df = pd.DataFrame(dict(
-        id=[], name=[], x=[], y=[],
-        color=[], customdata=[],
-        mid_point=[], mid_type=[]
-    ))
+    mids_df = points_row()
+
 
     def calc_mid(X, Y):
         mid_x, mid_y = np.mean(X), np.mean(Y)
@@ -367,39 +388,34 @@ def gen_triangulation_df(points):
         return length
 
     def add_mid_point(mdf, mpid, x, y, sid, stype):
-        if stype not in SC_MIDS.keys():
-            raise Exception("wrong simplex type", stype)
+        sname = get_sname(sid, stype)
+        pname = get_pname(mpid)
+        customdata = json.dumps(dict(id=int(mpid), name=pname, mp_pointer=sname, mp_type=stype, sc_name=SC_MIDS[stype]))
 
-        sname = f"{stype}{sid:04d}"
-        mdf = mdf.append(dict(
-            id=int(mpid), name=sname, x=x, y=y,
-            mid_point=sid,
-            mid_type=stype,
+        mdf = mdf.append(points_row(
+            int(mpid), pname, x, y,
+            mp_pointer=sname, mp_type=stype,
             color=None,
-            customdata=json.dumps(dict(
-                id=int(mpid), name=sname,
-                mid_point=sid, mid_type=stype,
-                sc_name=SC_MIDS[stype]
-            ))
+            customdata=customdata
         ), ignore_index=True)
-        # print(f">> add mid >> {mpid} >> {sname} >> {len(mdf.index)}")
+
         return mpid + 1, mpid, mdf
 
-    points = points.set_index("id", drop=False)
+    points_df = points_df.set_index("id", drop=False)
     eid = 0
-    mpid = np.max(points.index) + 1
-    for tid, s in enumerate(tri.simplices, start=1):
+    mpid = np.max(points_df.index) + 1
+    for tid, s in enumerate(simplices, start=1):
         # points: A < B < C
         # tri: A-B-C
         # edges: A-B, B-C, C-A
-        pid_A, pid_B, pid_C = sorted(points.iloc[s]["id"].to_list())
+        pid_A, pid_B, pid_C = sorted(points_df.iloc[s]["id"].to_list())
         print(f"\n>> points[{tid}] >> A={pid_A}, B={pid_B}, C={pid_C}")
 
         # 0) make triangle dict
-        ABC = points.loc[[pid_A, pid_B, pid_C]]
+        ABC = points_df.loc[[pid_A, pid_B, pid_C]]
+        tname = get_tname(tid)
         tmid_x, tmid_y = calc_mid(ABC["x"], ABC["y"])
         mpid, mpid_old, mids_df = add_mid_point(mids_df, mpid, tmid_x, tmid_y, tid, stype=ST_TRI)
-        tname = f"{ST_TRI}{tid:04d}"
         tri_row = dict(id=int(tid), name=tname,
                        pid_1=int(pid_A), pid_2=int(pid_B), pid_3=int(pid_C),
                        eid_1=None, eid_2=None, eid_3=None,
@@ -419,13 +435,13 @@ def gen_triangulation_df(points):
                 eid += 1
                 # print(f">> no edge[{e}] >> {edge} >> eid={eid}")
                 edge_points = ABC.loc[list(edge)]
-                ename = f"{ST_EDGE}{eid:04d}"
+                ename = get_ename(eid)
                 emid_x, emid_y = calc_mid(edge_points["x"], edge_points["y"])
                 mpid, mpid_old, mids_df = add_mid_point(mids_df, mpid, emid_x, emid_y, eid, stype=ST_EDGE)
                 edge_dict = dict(
                     id=int(eid), name=ename,
                     pid_1=edge[0], pid_2=edge[1],
-                    cof_pos=int(tid), cof_neg=0,
+                    cof_pos=tname, cof_neg=None,
                     cof_pos_type=ST_TRI, cof_neg_type=None,
                     mid_point=int(mpid_old),
                     length=calc_length(edge_points["x"], edge_points["y"])
@@ -449,7 +465,7 @@ def gen_triangulation_df(points):
                     raise Exception("cof_pos/neg", edge_row)
 
                 edge_customdata = json.loads(edge_row["customdata"][0])
-                edges_df.loc[[edge], "cof_neg"] = edge_customdata["cof_neg"] = int(tid)
+                edges_df.loc[[edge], "cof_neg"] = edge_customdata["cof_neg"] = tname
                 edges_df.loc[[edge], "cof_neg_type"] = edge_customdata["cof_neg_type"] = ST_TRI
                 edges_df.loc[[edge], "customdata"] = json.dumps(edge_customdata)
 
@@ -465,7 +481,6 @@ def gen_triangulation_df(points):
 
     edges_df = edges_df.astype({"id": int,
                                 "pid_1": int, "pid_2": int,
-                                "cof_pos": int, "cof_neg": int,
                                 "mid_point": int, "length": float
                                 }, copy=False)
     tris_df = tris_df.astype({"id": int,
@@ -476,21 +491,68 @@ def gen_triangulation_df(points):
                               }, copy=False)
     mids_df = mids_df.astype({"id": int,
                               "x": float, "y": float,
-                              "mid_point": int
                               }, copy=False)
     return edges_df, tris_df, mids_df
 
 
-def gen_boundary(tris: pd.DataFrame, tri_names: list) -> pd.DataFrame:
-    def boundary_row(eid=[], name=[], ort=[]):
-        return pd.DataFrame(dict(
-            id=eid, name=name, ort=ort
-        ), index=[eid])
+def gen_triangulation_data(simplices, points_df, **kwargs):
+    """
+    Generates triangulation data from a data frome of points
+        :param simplices:
+        :param points_df: a data frame of ``point``s to triangulate
+        :param kwargs:
+        :return:  tuple of update dicts
+    """
+    edge_color = kwargs.get("edge_color", COLORS_DICT[SC_EDGES])
+    edge_mid_color = kwargs.get("edge_mid_color", COLORS_DICT[SC_EDGES_MID])
+    edge_colors = (edge_color, edge_mid_color)
+    edge_width = kwargs.get("edge_width", 1.5)
+
+    tri_color = kwargs.get("tri_color", COLORS_DICT[SC_TRIS])
+    tri_mid_color = kwargs.get("tri_mid_color", COLORS_DICT[SC_TRIS_MID])
+    tri_colors = (tri_color, tri_mid_color)
+
+    # ----------------------------------------------------------------
+    edges_df, tris_df, mids_df = gen_triangulation_df(simplices, points_df)
+    points_df = pd.concat([points_df, mids_df], ignore_index=True)
+
+    plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df, edge_colors)
+    plotly_tris, plotly_tris_mid = gen_plotly_tris(points_df, tris_df, tri_colors)
+
+    points_dict = dict(
+        data=points_df, plotly=points_df
+    )
+
+    edges_dict = dict(
+        data=edges_df, plotly=plotly_edges, plotly_mids=plotly_edges_mid,
+        color=edge_color, edge_width=edge_width
+    )
+
+    tris_dict = dict(
+        data=tris_df, plotly=plotly_tris, plotly_mids=plotly_tris_mid,
+        color=tri_color
+    )
+
+    return points_dict, edges_dict, tris_dict
+
+
+def boundary_row(eid=[], ename=[], ort=[], sname=[], idx=None):
+    idx = [eid] if idx is None else idx
+    return pd.DataFrame(dict(
+        id=eid, name=ename, ort=ort, sname=sname
+    ), index=idx)
+
+
+def boundary_none_row(sname):
+    return boundary_row(eid=None, ename=None, ort=0, sname=sname, idx=[sname])
+
+
+def gen_tris_boundary(tri_names: list, tris: pd.DataFrame) -> pd.DataFrame:
 
     boundary_df = boundary_row()
 
     tris = tris.set_index('name', drop=False).loc[tri_names]
-    for index, tri in tris.iterrows():
+    for tname, tri in tris.iterrows():
         for e in range(1, 4):
             eid, ort = tri[f"eid_{e}"], tri[f"ort_{e}"]
             ename = get_ename(eid)
@@ -499,7 +561,8 @@ def gen_boundary(tris: pd.DataFrame, tri_names: list) -> pd.DataFrame:
                 boundary_df.loc[eid, 'ort'] += ort
             else:
                 boundary_df = pd.concat([
-                    boundary_df, boundary_row([int(eid)], [ename], [int(ort)])
+                    boundary_df,
+                    boundary_row([int(eid)], [ename], [int(ort)], [tname])
                 ])
 
     boundary_df = boundary_df.loc[boundary_df.ort != 0]
@@ -507,14 +570,113 @@ def gen_boundary(tris: pd.DataFrame, tri_names: list) -> pd.DataFrame:
     return boundary_df
 
 
-def plotly_row(id=[], name=[], x=[], y=[], color=[], customdata=[]):
+def get_neighbours(sname, edges, tris, holes, holes_bd, from_snames=None) -> dict:
+    """
+    For a triangle or/and hole ``sname``
+    returns a list  of their neighbors from the ``from_snames`` list.
+    If ``from_snames`` is None then can use any triangles
+        :param sname:
+        :param edges:       edges df
+        :param tris:        tris df
+        :param holes:       holes df ... or their boundaries????
+        :param holes_bd:    boundaries of holes
+        :param from_snames:
+        :return: a dict of neighboring holes and triangles indexed by the shared edge
+    """
+
+    if not from_snames:
+        from_snames = tris['name'].to_list() + holes['name'].to_list()
+
+    # a simplex/cell given by ``sname`` shouldn't count
+    # None - outer void
+    from_snames = set(from_snames) - {sname} | {None}
+
+    def get_tri_neighbors(tname, edges, tris, from_snames):
+        tri = tris.set_index('name', drop=False).loc[tname]
+        tri_edges = tri[["eid_1", "eid_2", "eid_3"]]
+        eid_1, eid_2, eid_3 = tri_edges[0], tri_edges[1], tri_edges[2]
+        eid_1, eid_2, eid_3 = get_enames([eid_1, eid_2, eid_3])
+
+        edges = edges.set_index("name", drop=False)
+        cofaces = edges.loc[[eid_1, eid_2, eid_3], ["name", "cof_pos", "cof_neg"]]
+
+        tri_neighbors = dict()
+        for index, cf_row in cofaces.iterrows():
+            ename, cf_pos, cf_neg = cf_row['name'], cf_row['cof_pos'], cf_row['cof_neg']
+            cf = cf_pos if cf_pos != tname else cf_neg
+            if cf in from_snames:
+                tri_neighbors[ename] = cf
+
+        return tri_neighbors
+
+
+    def get_hole_neighbors(hname, edges, holes_bd, from_snames):
+        # TODO: hole neighbors
+        return None
+
+    dispatcher_dict = {ST_TRI: get_tri_neighbors, ST_HOLE: get_hole_neighbors}
+
+    # ---------------------------------------------------------------
+    stype = get_stype(sname)
+    if stype in dispatcher_dict.keys():
+        return dispatcher_dict[stype](sname, edges, tris, from_snames)
+
+    return {}
+
+
+def hole_row(hid=[], hname=[], mid_point=[], area=[], customdata=[]):
     return pd.DataFrame(dict(
-        id=id, name=name, x=x, y=y, color=color, customdata=customdata
-    ), index=[id])
+        id=hid, name=hname, mid_point=mid_point,
+        area=area, customdata=customdata
+    ), index=[hname])
 
 
-def plotly_none_row(id=None, name=None):
-    return plotly_row(id=id, name=name, x=None, y=None, color=None, customdata=None)
+def gen_holes_df(snames, points, edges, tris, holes=None, holes_bd=None) -> pd.DataFrame:
+    """
+
+    :param snames:
+    :param points:
+    :param edges:
+    :param tris:
+    :param holes:   to merge holes with triangle or another hole
+    :param holes_bd:
+    :return: holes_df, holes_bd
+    """
+    # hole: {
+    #   id, name: hid, hname
+    #   boundary: list of edges + orientation   <-- get_boundary
+    #   mid_point: pid                          <-- one tris' mid_points
+    #   area: float                             <-- sum of tris.area
+    # }
+    #
+    # How to detect holes:
+    # BFS or UNION/FIND? --> BFS looks better
+    #
+
+    holes = hole_row() if not holes else holes
+    holes_bd = boundary_row() if not holes_bd else holes
+
+    mids = points[points['mid_point'].isna()]
+    points = points[points['mid_point'].notna()]
+
+    tnames = filter_stype(snames, ST_TRI)
+    hnames = filter_stype(snames, ST_HOLE)
+
+
+
+
+    pass
+
+
+
+def plotly_row(sid=[], sname=[], x=[], y=[], color=[], customdata=[]):
+    return pd.DataFrame(dict(
+        id=sid, name=sname, x=x, y=y, color=color, customdata=customdata
+    ), index=[sid])
+
+
+def plotly_none_row(sid, sname):
+    return plotly_row(sid=sid, sname=sname, x=None, y=None, color=None, customdata=None)
 
 
 def gen_plotly_edges(points, edges, edge_colors=(COLORS_DICT[SC_EDGES], COLORS_DICT[SC_EDGES_MID])):
@@ -528,7 +690,7 @@ def gen_plotly_edges(points, edges, edge_colors=(COLORS_DICT[SC_EDGES], COLORS_D
         p1 = points.loc[edge['pid_1']]
         p2 = points.loc[edge['pid_2']]
         mp = points.loc[edge['mid_point']]
-        if mp['mid_point'] != edge['id'] or edge['mid_point'] != mp['id']:
+        if mp['mp_pointer'] != edge['name'] or edge['mid_point'] != mp['id']:
             raise Exception("mid point ids are wrong", edge, mp)
 
         plotly_edges = pd.concat([
@@ -560,16 +722,16 @@ def gen_plotly_tris(points, tris, tri_colors=(COLORS_DICT[SC_TRIS], COLORS_DICT[
         p2 = points.loc[tri['pid_2']]
         p3 = points.loc[tri['pid_3']]
         mp = points.loc[tri['mid_point']]
-        if mp['mid_point'] != tri['id'] or tri['mid_point'] != mp['id']:
+        if mp['mp_pointer'] != tri['name'] or tri['mid_point'] != mp['id']:
             raise Exception("mid point ids are wrong", tri, mp)
         plotly_tris = pd.concat([
             plotly_tris,
-            # plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
-            # plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
-            # plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
-            plotly_row(p1['name'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
-            plotly_row(p2['name'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
-            plotly_row(p3['name'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
+            plotly_row(tri['id'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
+            plotly_row(tri['id'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
+            plotly_row(tri['id'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
+            # plotly_row(p1['name'], tri['name'], p1['x'], p1['y'], tri_color, tri['customdata']),
+            # plotly_row(p2['name'], tri['name'], p2['x'], p2['y'], tri_color, tri['customdata']),
+            # plotly_row(p3['name'], tri['name'], p3['x'], p3['y'], tri_color, tri['customdata']),
             plotly_none_row(tri['id'], tri['name'])
         ])
 
@@ -582,12 +744,25 @@ def gen_plotly_tris(points, tris, tri_colors=(COLORS_DICT[SC_TRIS], COLORS_DICT[
 
 
 def gen_plotly_hl(names, plotly_df, hl_color):
+    """
+    Assigns the highlight color ``hl_color`` in ``plotly_df``
+    to rows corresponding to ``names``
+        :param names:
+        :param plotly_df:
+        :param hl_color:
+        :return:
+    """
     plotly_df = plotly_df.set_index("name", drop=False)
     plotly_df = plotly_df.loc[names]
     if not plotly_df.empty:
         plotly_df.loc[:, "color"] = hl_color
     return plotly_df
 
+
+def get_stats(snames: list):
+    # TODO: get_stats : number of elements, area/length..
+    # number of elements, area/length..
+    pass
 
 # -----------------------------------------------------------------------------
 #           MAKE TRACES / PLOTS
@@ -620,7 +795,7 @@ def upd_trace_points(ids=None) -> go.Figure:
     global main_figure, main_data
     pts_data = main_data['points']
     plotly_points = pts_data['plotly']
-    plotly_points = plotly_points[plotly_points['mid_point'].isna()]
+    plotly_points = plotly_points[plotly_points['mp_pointer'].isna()]
 
     main_figure.update_traces(dict(
         ids=plotly_points['name'],
@@ -852,6 +1027,8 @@ def random_cloud(n, **kwargs) -> go.Figure:
     return get_main_figure()
 
 
+
+
 def triangulate(**kwargs) -> go.Figure:
     """
     Generate a triangulation for existing cloud
@@ -859,38 +1036,18 @@ def triangulate(**kwargs) -> go.Figure:
         :param kwargs:
         :return: main_figure
     """
-    edge_color = kwargs.get("edge_color", COLORS_DICT[SC_EDGES])
-    edge_mid_color = kwargs.get("edge_mid_color", COLORS_DICT[SC_EDGES_MID])
-    edge_colors = (edge_color, edge_mid_color)
-    edge_width = kwargs.get("edge_width", 1.5)
-    tri_color = kwargs.get("tri_color", COLORS_DICT[SC_TRIS])
-    tri_mid_color = kwargs.get("tri_mid_color", COLORS_DICT[SC_TRIS_MID])
-    tri_colors = (tri_color, tri_mid_color)
-
     global main_figure, main_data
     if 'data' not in main_data['points']:
         return get_main_figure()
 
-    # TODO: should it be extracted into a new function?
     points_df = main_data['points']['data']
-    points_df = points_df[points_df['mid_point'].isna()]
-    edges_df, tris_df, mids_df = gen_triangulation_df(points_df)
+    points_df = points_df[points_df['mp_pointer'].isna()]
 
-    main_data['points']['data'] = pd.concat([points_df, mids_df], ignore_index=True)
-    points_df = main_data['points']['data']
-    # TODO: main_data['points']['plotly'] = points_df, because after prev line it is different from main_data['points']['data']
-
-    plotly_edges, plotly_edges_mid = gen_plotly_edges(points_df, edges_df, edge_colors)
-    main_data['edges'].update(dict(
-        data=edges_df, plotly=plotly_edges, plotly_mids=plotly_edges_mid,
-        color=edge_color, edge_width=edge_width
-    ))
-
-    plotly_tris, plotly_tris_mid = gen_plotly_tris(points_df, tris_df, tri_colors)
-    main_data['tris'].update(dict(
-        data=tris_df, plotly=plotly_tris, plotly_mids=plotly_tris_mid,
-        color=tri_color
-    ))
+    tri = Delaunay(points_df[["x", "y"]])
+    points_dict, edges_dict, tris_dict = gen_triangulation_data(tri.simplices, points_df, **kwargs)
+    main_data['points'].update(points_dict)
+    main_data['edges'].update(edges_dict)
+    main_data['tris'].update(tris_dict)
 
     upd_trace_edges()
     upd_trace_edges_mid()
@@ -981,7 +1138,7 @@ def highlight_points(pts_names: list, **kwargs) -> go.Figure:
 
     pts_data = main_data['points']
     plotly_points = pts_data['plotly']
-    plotly_points = plotly_points[plotly_points['mid_point'].isna()].set_index('name')
+    plotly_points = plotly_points[plotly_points['mp_pointer'].isna()].set_index('name')
 
     marker_size = pd.Series([pts_data['marker_size']] * pts_data['n'], index=plotly_points.index)
     marker_size.loc[pts_names] = pts_data['marker_size'] * hl_mult
@@ -1053,7 +1210,7 @@ def highlight_boundary(tri_names: list, **kwargs) -> go.Figure:
         return get_main_figure()
 
     tris_df = main_data['tris']['data']
-    boundary = gen_boundary(tris_df, tri_names)
+    boundary = gen_tris_boundary(tri_names, tris_df)
 
     pos_boundary = boundary.loc[boundary.ort == 1]
     neg_boundary = boundary.loc[boundary.ort == -1]

@@ -208,10 +208,25 @@ tris_tab_row = dbc.Row(children=[
     ])
 ], className='mb-0')
 
-stat_tabs_row = dbc.Row([dbc.Col([
+holes_tab_row = dbc.Row(children=[
+    dbc.Col(width=8, children=[
+        html.P(),
+        dbc.Card(children=[
+            dbc.CardHeader("Stats"),
+            dbc.CardBody(id='holes-stats-card')
+        ])
+    ]),
+    dbc.Col(width=4, children=[
+        html.P(),
+        dbc.Button("hole button", id='hole-button', color='primary')
+    ])
+], className='mb-0')
 
+
+
+simplex_tabs_row = dbc.Row([dbc.Col([
     # dbc.Card([
-        dbc.Tabs(id='stat-tabs', active_tab=scx.ST_POINT, class_name='nav-pills nav-justified',
+        dbc.Tabs(id='simplex-tabs', active_tab=scx.ST_POINT, class_name='nav-pills nav-justified',
                  # className='nav nav-tabs',  parent_className='nav nav-tabs',
                  children=[
                      dbc.Tab(label='Points', tab_id=scx.ST_POINT, children=[points_tab_row],
@@ -219,23 +234,24 @@ stat_tabs_row = dbc.Row([dbc.Col([
                              # active_tab_style={"background-color": "green", "color":  "#17a2b8"}
                              ),
                      dbc.Tab(label='Edges', tab_id=scx.ST_EDGE, children=[edges_tab_row]),
-                     dbc.Tab(label='Triangles', tab_id=scx.ST_TRI, children=[tris_tab_row])
+                     dbc.Tab(label='Triangles', tab_id=scx.ST_TRI, children=[tris_tab_row]),
+                     dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=True)
                  ])
     # ])
 ])
 ])
 
-stat_tabs_card = dbc.Card(children=[
+simplex_tabs_card = dbc.Card(children=[
     # dbc.CardHeader(tabs_row),
     # dbc.CardBody(html.Div(id='tabs-content-div'))
-    dbc.CardBody(stat_tabs_row)
+    dbc.CardBody(simplex_tabs_row)
 ], className='mt-0 mb-0', color="info", outline=True)
 
 main_tabs_content = {
     'main-tab-scx': [
         buttons_card,
         html.P(),
-        stat_tabs_card,
+        simplex_tabs_card,
     ],
     'main-tab-ntk': [
         html.P("some content")
@@ -293,7 +309,7 @@ app.layout = html.Div([
             ),
             # Right Side ----------------------------------
             dbc.Col(
-                width=5,
+                width=4,
                 children=[
                     # Buttons -----------------------------
                     # buttons_card,
@@ -302,7 +318,7 @@ app.layout = html.Div([
                     # check_radio_row,
                     # Tabs --------------------------------
                     # html.P(),
-                    # stat_tabs_card,
+                    # simplex_tabs_card,
                     main_tabs_card,
                     # Click Data --------------------------
                     html.P(),
@@ -324,7 +340,7 @@ app.layout = html.Div([
     inputs=[Input('main-figure', 'clickData'),
             Input('main-figure', 'selectedData'),
             Input('reset-button', 'n_clicks'),
-            State('stat-tabs', 'active_tab')]
+            State('simplex-tabs', 'active_tab')]
 )
 def display_click_data(clickData, selectData, reset_click, stype):
     print(f"%%% select data %%% {selectData and selectData['points']}")
@@ -368,10 +384,9 @@ def display_click_data(clickData, selectData, reset_click, stype):
 @app.callback(
     output=[Output('main-figure', 'figure'),
             Output('main-figure', 'selectedData')],
-    # inputs=Input('main-radio', 'value')
-    inputs=Input('stat-tabs', 'active_tab')
+    inputs=Input('simplex-tabs', 'active_tab')
 )
-def stat_tabs_to_figure(active_tab):
+def show_simplices_tabs(active_tab):
     print(f"%%% radio %%% {active_tab}")
     scx.clear_highlighting()
     scx.show_hide_points(active_tab, mode='opacity')
@@ -382,7 +397,7 @@ def stat_tabs_to_figure(active_tab):
 
 # @app.callback(
 #     output=Output('tabs-content-div', 'children'),
-#     inputs=Input('stat-tabs', 'active_tab')
+#     inputs=Input('simplex-tabs', 'active_tab')
 # )
 # def stat_tabs_to_content(active_tab):
 #     tabs_content = {
@@ -409,7 +424,7 @@ def main_tabs_to_content(active_tab):
 
 @app.callback(
     output=[Output('main-figure', 'figure'),
-            Output('stat-tabs', 'active_tab')],
+            Output('simplex-tabs', 'active_tab')],
     inputs=[Input('random-button', 'n_clicks'),
             State('random-size-input', 'value')]
 )
