@@ -351,16 +351,16 @@ def display_click_data(clickData, selectData, reset_click, stype):
         print(f"%%% select data %%% {snames}")
 
         if stype == scx.ST_POINT:
-            pnames = set(scx.filter_stype(snames, scx.ST_POINT))
+            pnames = set(scx.filter_by_stype(snames, scx.ST_POINT))
             seleced_points = len(pnames)
             scx.highlight_points(pnames)
 
         if stype == scx.ST_EDGE:
-            enames = set(scx.filter_stype(snames, scx.ST_EDGE))
+            enames = set(scx.filter_by_stype(snames, scx.ST_EDGE))
             scx.highlight_edges(enames)
 
         if stype == scx.ST_TRI:
-            tnames = set(scx.filter_stype(snames, scx.ST_TRI))
+            tnames = set(scx.filter_by_stype(snames, scx.ST_TRI))
             scx.highlight_triangles(tnames)
             tris_stats = pd.DataFrame(dict(stats={
                 '# triangles': len(tnames),
@@ -435,7 +435,7 @@ def random_cloud(rnd_click, rnd_size):
     if rnd_click is not None:
         rnd_size = rnd_size if rnd_size else 15
         # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
-        scx.random_cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        scx.Random_Cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
         # scx.show_hide_points(scx.ST_POINT)
 
     return scx.get_main_figure(), scx.ST_POINT
@@ -451,7 +451,7 @@ def triangulate_cloud(sci_click):
           f"\n================\n")
 
     if sci_click is not None:
-        scx.triangulate()
+        scx.Triangulate()
 
     return scx.get_main_figure()
 
