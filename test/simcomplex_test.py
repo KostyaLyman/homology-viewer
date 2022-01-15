@@ -10,22 +10,22 @@ import simcomplex as scx
 class TestSimcomplex(unittest.TestCase):
 
     def test_as_range(self):
-        lim = scx.as_range(3)
+        lim = scx._as_range(3)
         self.assertEqual(lim, (0, 3), "single int input")
 
-        lim = scx.as_range(3.5)
+        lim = scx._as_range(3.5)
         self.assertEqual(lim, (0, 3.5), "single float input")
 
-        lim = scx.as_range((3.3, 4.4))
+        lim = scx._as_range((3.3, 4.4))
         self.assertEqual(lim, (3.3, 4.4), "tuple of floats, a < b")
 
-        lim = scx.as_range((4.4, 3.3))
+        lim = scx._as_range((4.4, 3.3))
         self.assertEqual(lim, (3.3, 4.4), "tuples of floats, a > b")
 
-        lim = scx.as_range((3, 4))
+        lim = scx._as_range((3, 4))
         self.assertEqual(lim, (3, 4), "tuple of ints, a < b")
 
-        lim = scx.as_range((4, 3))
+        lim = scx._as_range((4, 3))
         self.assertEqual(lim, (3, 4), "tuples of ints, a > b")
 
     def test_parse_name(self):
@@ -324,7 +324,6 @@ class TestSimcomplex(unittest.TestCase):
         # TODO: test gen_tris_bd with repeating tnames
         pass
 
-
     def test_add_boundaries(self):
         # NO OVERLAP ================================================
         bd_1 = scx.boundary_row(
@@ -469,6 +468,33 @@ class TestSimcomplex(unittest.TestCase):
 
         pass
 
+    def test_orient_single_boundary(self):
+        # points #3 -------------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 6, 10, 5
+        x = [0, 2, 0, 3, 4, 2]
+        y = [0, 0, 4, 1, -2, 4]
+
+        # setup / triangulate ---------------------------------------
+        points_df = scx.gen_points_data((x, y))['data']
+        tri = Delaunay(points_df[["x", "y"]])
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(tri.simplices, points_df)
+        points_df = pd.concat([points_df, mids_df], ignore_index=True)
+        edges_df = scx._log_set_index(edges_df, 'name', "test_orient_single_boundary : edges")
+
+        # test ------------------------------
+        test_tris = ["t0003", "t0005"]
+        expected_bd = ["e0001", "e0006", "e0010", "e0004"]
+
+        bd = scx.get_tris_boundary(test_tris, tris_df)
+        bd.loc[:, "sname"] = "h0001"
+        bd = bd.sort_index()
+        self.assertListEqual(sorted(expected_bd), bd["ename"].tolist(), "original bd has wrong edges")
+
+        bd = scx.orient_single_boundary(bd, edges_df)
+        self.assertListEqual(expected_bd, bd["ename"].tolist(), "oriented bd has wrong edges")
+
+        pass
+
     def test_gen_holes_from_tris(self):
         # points #3 -------------------------------------------------
         N_POINTS, N_EDGES, N_TRIS = 6, 10, 5
@@ -497,31 +523,31 @@ class TestSimcomplex(unittest.TestCase):
             holes_bd = holes_bd.set_index("ename", drop=False)
             holes_mids = holes_mids.set_index("id", drop=False)
 
-            self.assertEqual(expecations["holes"]["len"], len(holes.index), "expecations[holes][len]")
-            self.assertCountEqual(expecations["holes"]["area"], holes["area"].tolist(), "expecations[holes][area]")
-            self.assertEqual(expecations["bd"]["len"], len(holes_bd.index), "expecations[bd][len]")
+            self.assertEqual(expecations["holes"]["len"], len(holes.index), "expected[holes][len]")
+            self.assertCountEqual(expecations["holes"]["area"], holes["area"].tolist(), "expected[holes][area]")
+            self.assertEqual(expecations["bd"]["len"], len(holes_bd.index), "expected[bd][len]")
             for ename, ort in expecations["bd"]["ort"].items():
-                self.assertEqual(ort, holes_bd.loc[ename, "ort"], f"expecations[bd][ort][{ename}]")
-            self.assertEqual(expecations["mids"]["len"], len(holes_mids), "expecations[mids][len]")
+                self.assertEqual(ort, holes_bd.loc[ename, "ort"], f"expected[bd][ort][{ename}]")
+            self.assertEqual(expecations["mids"]["len"], len(holes_mids), "expected[mids][len]")
             for i, (pid, hmid) in enumerate(holes_mids.iterrows()):
                 pname = scx.get_pname(int(pid))
                 self.assertNotIn(pname, mids_df["name"].tolist(), f"repeating mids name = [{i}: {pname}]")
                 self.assertIn(pid, holes["mid_point"].tolist(), f"hmid [{i}: {pname}] not in holes")
-                self.assertAlmostEqual(expecations["mids"]["x"][i], hmid["x"], 2, f"expecations[mids][x][{i}: {pname}]")
-                self.assertAlmostEqual(expecations["mids"]["y"][i], hmid["y"], 2, f"expecations[mids][y][{i}: {pname}]")
+                self.assertAlmostEqual(expecations["mids"]["x"][i], hmid["x"], 2, f"expected[mids][x][{i}: {pname}]")
+                self.assertAlmostEqual(expecations["mids"]["y"][i], hmid["y"], 2, f"expected[mids][y][{i}: {pname}]")
             self.assertEqual(expecations["to_remove"]["points"], len(to_remove['points']),
-                             "expecations[to_remove][points]")
-            self.assertEqual(expecations["to_remove"]["mids"], len(to_remove['mids']), "expecations[to_remove][mids]")
+                             "expected[to_remove][points]")
+            self.assertEqual(expecations["to_remove"]["mids"], len(to_remove['mids']), "expected[to_remove][mids]")
             self.assertEqual(expecations["to_remove"]["edges"], len(to_remove['edges']),
-                             "expecations[to_remove][edges]")
-            self.assertEqual(expecations["to_remove"]["tris"], len(to_remove['tris']), "expecations[to_remove][tris]")
+                             "expected[to_remove][edges]")
+            self.assertEqual(expecations["to_remove"]["tris"], len(to_remove['tris']), "expected[to_remove][tris]")
             self.assertEqual(expecations["to_remove"]["holes"], len(to_remove['holes']),
-                             "expecations[to_remove][holes]")
+                             "expected[to_remove][holes]")
             self.assertCountEqual(test_tnames, to_remove['tris'], f"to_remove[tris] ")
 
         # NO OVERLAP ================================================
         test_tnames = ["t0003", "t0002"]
-        expecations = dict(
+        expected = dict(
             holes={"len": 2, "area": [2, 4]},
             bd={"len": 6, "ort": {
                 "e0001": -1, "e0006": +1, "e0007": +1, "e0004": +1, "e0005": +1, "e0002": -1
@@ -534,11 +560,11 @@ class TestSimcomplex(unittest.TestCase):
         )
         # test:
         holes, holes_bd, holes_mids, to_remove = scx.gen_holes_df(test_tnames, **data)
-        assert_holes_df(self, test_tnames, expecations, holes, holes_bd, holes_mids, mids_df, to_remove)
+        assert_holes_df(self, test_tnames, expected, holes, holes_bd, holes_mids, mids_df, to_remove)
 
         # WITH OVERLAP ==============================================
         test_tnames = ["t0003", "t0005"]
-        expecations = dict(
+        expected = dict(
             holes={"len": 1, "area": [6]},
             bd={"len": 4, "ort": {
                 "e0001": -1, "e0006": +1, "e0004": -1, "e0010": +1
@@ -553,17 +579,17 @@ class TestSimcomplex(unittest.TestCase):
         )
 
         holes, holes_bd, holes_mids, to_remove = scx.gen_holes_df(test_tnames, **data)
-        assert_holes_df(self, test_tnames, expecations, holes, holes_bd, holes_mids, mids_df, to_remove)
-        self.assertCountEqual(expecations['to_remove_lists']['mids'], sorted(map(scx.get_pname, to_remove['mids'])),
-                              "expecations[to_remove_lists][mids]")
-        self.assertCountEqual(expecations['to_remove_lists']['edges'], to_remove['edges'],
-                              "expecations[to_remove_lists][edges]")
-        self.assertCountEqual(expecations['to_remove_lists']['tris'], to_remove['tris'],
-                              "expecations[to_remove_lists][tris]")
+        assert_holes_df(self, test_tnames, expected, holes, holes_bd, holes_mids, mids_df, to_remove)
+        self.assertCountEqual(expected['to_remove_lists']['mids'], sorted(map(scx.get_pname, to_remove['mids'])),
+                              "expected[to_remove_lists][mids]")
+        self.assertCountEqual(expected['to_remove_lists']['edges'], to_remove['edges'],
+                              "expected[to_remove_lists][edges]")
+        self.assertCountEqual(expected['to_remove_lists']['tris'], to_remove['tris'],
+                              "expected[to_remove_lists][tris]")
 
         # WITH OVERLAP & POINT ======================================
         test_tnames = ["t0001", "t0002", "t0003", "t0005"]
-        expecations = dict(
+        expected = dict(
             holes={"len": 1, "area": [10]},
             bd={"len": 4, "ort": {
                 "e0003": +1, "e0006": +1, "e0010": +1, "e0005": +1
@@ -582,19 +608,17 @@ class TestSimcomplex(unittest.TestCase):
         )
 
         holes, holes_bd, holes_mids, to_remove = scx.gen_holes_df(test_tnames, **data)
-        assert_holes_df(self, test_tnames, expecations, holes, holes_bd, holes_mids, mids_df, to_remove)
-        self.assertSetEqual(expecations['to_remove_lists']['points'], set(map(scx.get_pname, to_remove['points'])),
-                              "expecations[to_remove_lists][points]")
-        self.assertSetEqual(expecations['to_remove_lists']['mids'], set(map(scx.get_pname, to_remove['mids'])),
-                              "expecations[to_remove_lists][mids]")
-        self.assertSetEqual(expecations['to_remove_lists']['edges'], set(to_remove['edges']),
-                              "expecations[to_remove_lists][edges]")
-        self.assertCountEqual(expecations['to_remove_lists']['tris'], set(to_remove['tris']),
-                              "expecations[to_remove_lists][tris]")
+        assert_holes_df(self, test_tnames, expected, holes, holes_bd, holes_mids, mids_df, to_remove)
+        self.assertSetEqual(expected['to_remove_lists']['points'], set(map(scx.get_pname, to_remove['points'])),
+                              "expected[to_remove_lists][points]")
+        self.assertSetEqual(expected['to_remove_lists']['mids'], set(map(scx.get_pname, to_remove['mids'])),
+                              "expected[to_remove_lists][mids]")
+        self.assertSetEqual(expected['to_remove_lists']['edges'], set(to_remove['edges']),
+                              "expected[to_remove_lists][edges]")
+        self.assertCountEqual(expected['to_remove_lists']['tris'], set(to_remove['tris']),
+                              "expected[to_remove_lists][tris]")
 
         pass
-
-
 
     def test_get_neighbours_of_tri_no_holes(self):
         # points #3 -------------------------------------------------
@@ -648,7 +672,6 @@ class TestSimcomplex(unittest.TestCase):
             self.assertTrue(ename in neighbors.keys(), f"{ename} is not in neighbors.keys()")
             self.assertEqual(nb, neighbors[ename], f"{ename} neighbor is wrong")
 
-
         # WITH ``from_snames`` ======================================
         # test: inner triangle ----------------------------
         test_tri = "t0003"
@@ -691,7 +714,6 @@ class TestSimcomplex(unittest.TestCase):
     def test_get_neighbouring_tris_of_hole(self):
         pass
 
-
     def test_get_points(self):
         # points #3 -------------------------------------------------
         N_POINTS, N_EDGES, N_TRIS = 6, 10, 5
@@ -704,18 +726,21 @@ class TestSimcomplex(unittest.TestCase):
         tri = Delaunay(points_df[["x", "y"]])
         edges_df, tris_df, mids_df = scx.gen_triangulation_df(tri.simplices, points_df)
         points_df = pd.concat([points_df, mids_df], ignore_index=True)
+        points_df = scx._log_set_index(points_df, 'id', "test_get_points : points_df")
 
         # test edges ------------------------------------------------
         test_edges = ["e0002", "e0004", "e0005"]
         expected_pids = [2, 4, 5]
-        pids = sorted(scx.get_points(test_edges, edges_df))
+        pids = (scx.get_points(test_edges, edges_df))
+        print(f"pids=[{pids}]")
         self.assertIsNotNone(pids)
         self.assertCountEqual(expected_pids, pids)
 
         # test tris -------------------------------------------------
         test_tris = ["t0004", "t0003", "t0005"]
         expected_pids = [1, 2, 3, 4, 6]
-        pids = sorted(scx.get_points(test_tris, tris_df))
+        pids = (scx.get_points(test_tris, tris_df))
+        print(f"pids=[{pids}]")
         self.assertIsNotNone(pids)
         self.assertCountEqual(expected_pids, pids)
         pass
@@ -752,6 +777,54 @@ class TestSimcomplex(unittest.TestCase):
         self.assertTrue(type(center) is pd.Series, "center should be Series")
         self.assertEqual(expected["x"], center["x"], "x is wrong")
         self.assertEqual(expected["y"], center["y"], "y is wrong")
+
+        pass
+
+    def test_get_ort_edges(self):
+        # points #3 -------------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 6, 10, 5
+        x = [0, 2, 0, 3, 4, 2]
+        y = [0, 0, 4, 1, -2, 4]
+
+        # setup / triangulate ---------------------------------------
+        points_df = scx.gen_points_data((x, y))['data']
+        tri = Delaunay(points_df[["x", "y"]])
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(tri.simplices, points_df)
+        points_df = pd.concat([points_df, mids_df], ignore_index=True)
+
+        edges_df = scx._log_set_index(edges_df, 'name', "test_get_ort_edges : edges")
+
+        # test :: get_ort_edges -------------------------------------
+        ecols = len(edges_df.columns)
+        test_enames = ["e0004", "e0002", "e0008"]
+        test_orts = [+1, -1, -1]
+        expected = {"e0004": (2, 4), "e0002": (5, 2), "e0008": (3, 1)}
+
+        edges = scx.get_ort_edges(test_enames, test_orts, edges_df)
+        self.assertIsNotNone(edges, "ort edges is None")
+        self.assertEqual(ecols, len(edges_df.columns), "wrong number of columns in the original edges_df")
+        self.assertEqual(ecols, len(edges.columns), "wrong number of columns in the ort edges")
+        self.assertEqual(len(test_enames), edges.shape[0], "ort edges have wrong number of rows")
+        self.assertListEqual(test_enames, edges['name'].tolist(), "wrong enames in ort edges")
+        for ename, expecged_edge in expected.items():
+            edge = edges.at[ename, 'pid_1'], edges.at[ename, 'pid_2']
+            self.assertEqual(expecged_edge, edge, f"wrong edge[{ename}]=({edge}), expected=({expecged_edge})")
+
+        # test :: get_ort_edges 2 -------------------------------------
+        ecols = len(edges_df.columns)
+        test_enames = pd.Series(["e0004", "e0002", "e0008"])
+        test_orts = pd.Series([+1, -1, -1], index=test_enames)
+        expected = {"e0004": (2, 4), "e0002": (5, 2), "e0008": (3, 1)}
+
+        edges = scx.get_ort_edges(test_enames, test_orts, edges_df)
+        self.assertIsNotNone(edges, "ort edges is None")
+        self.assertEqual(ecols, len(edges_df.columns), "wrong number of columns in the original edges_df")
+        self.assertEqual(ecols, len(edges.columns), "wrong number of columns in the ort edges")
+        self.assertEqual(len(test_enames), edges.shape[0], "ort edges have wrong number of rows")
+        self.assertListEqual(test_enames.tolist(), edges['name'].tolist(), "wrong enames in ort edges")
+        for ename, expecged_edge in expected.items():
+            edge = edges.at[ename, 'pid_1'], edges.at[ename, 'pid_2']
+            self.assertEqual(expecged_edge, edge, f"wrong edge[{ename}]=({edge}), expected=({expecged_edge})")
 
         pass
 
@@ -860,7 +933,6 @@ class TestSimcomplex(unittest.TestCase):
             "edges' customdata is different from mid points' customdata"
         )
 
-
     def test_plotly_tris(self):
         # points #1 -------------------------------------------------
         N_POINTS, N_EDGES, N_TRIS = 4, 5, 2
@@ -876,7 +948,55 @@ class TestSimcomplex(unittest.TestCase):
         plotly_tris, plotly_tris_mid = scx.gen_plotly_tris(points_df, tris_df)
         self.assertEqual(N_TRIS * 4, len(plotly_tris.index), "not all edges are in the plotly data")
         self.assertEqual(N_TRIS, len(plotly_tris_mid.index), "not all edges are in the plotly data")
+        pass
 
+    def test_plotly_holes_no_overlap(self):
+        # points #3 -------------------------------------------------
+        N_POINTS, N_EDGES, N_TRIS = 6, 10, 5
+        x = [0, 2, 0, 3, 4, 2]
+        y = [0, 0, 4, 1, -2, 4]
+
+        # setup / triangulate ---------------------------------------
+        points_df = scx.gen_points_data((x, y))['data']
+        tri = Delaunay(points_df[["x", "y"]])
+        edges_df, tris_df, mids_df = scx.gen_triangulation_df(tri.simplices, points_df)
+        points_df = pd.concat([points_df, mids_df], ignore_index=True)
+
+        # test: 2 holes NO OVERLAP ----------------------------------
+        test_tnames = ["t0002", "t0003"]
+        test_mids = ["p0011", "p0014"]
+        test_hnames = ["h0001", "h0002"]
+
+        # points_df = scx._log_set_index(points_df, 'name', "test_plotly_holes : points")
+        points_df = points_df.set_index('name', drop=False)
+        points_df.loc[test_mids, "mp_pointer"] = test_hnames
+        points_df.loc[test_mids, "mp_type"] = scx.ST_HOLE
+        points_df = points_df.set_index('id', drop=False)
+
+        edges_df = scx._log_set_index(edges_df, 'name', "test_plotly_holes : edges")
+        edges_df.loc[["e0004", "e0005", "e0006", "e0007"], 'cof_pos_type'] = scx.ST_HOLE
+        edges_df.loc[["e0004", "e0005"], 'cof_pos'] = "h0001"
+        edges_df.loc[["e0006", "e0007"], 'cof_pos'] = "h0002"
+        edges_df.loc[["e0001", "e0002"], 'cof_neg_type'] = scx.ST_HOLE
+        edges_df.loc[["e0002"], 'cof_neg'] = "h0001"
+        edges_df.loc[["e0001"], 'cof_neg'] = "h0002"
+
+        holes_bd = scx.get_tris_boundary(test_tnames, tris_df)
+        holes_bd = holes_bd.set_index('sname', drop=False)
+        holes_bd.loc[test_tnames, 'sname'] = ["h0001"]*3 + ["h0002"]*3
+        holes_bd = holes_bd.set_index('ename', drop=False)
+        holes_bd = holes_bd.loc[["e0002", "e0004", "e0005", "e0001", "e0006", "e0007"]]
+        holes_bd = holes_bd.set_index('eid', drop=False)
+
+        holes = pd.concat([
+            scx.holes_row(1, "h0001", 11, 2, None),
+            scx.holes_row(2, "h0002", 14, 4, None)
+        ])
+
+        ply_holes, ply_holes_mid = scx.gen_plotly_holes(points_df, edges_df, holes, holes_bd, "red", "blue")
+        self.assertEqual(len(test_hnames) * 4, ply_holes.shape[0], "ply_holes: wrong number of rows")
+        self.assertEqual(len(test_hnames), ply_holes_mid.shape[0], "ply_holes_mids: wrong number of rows")
+        pass
 
     def test_plotly_hl_edges(self):
         # points #1 -------------------------------------------------
