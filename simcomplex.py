@@ -723,7 +723,7 @@ def gen_holes_df(snames, points, edges, tris, holes=None, holes_bd=None):
     tnames = filter_by_stype(snames, ST_TRI)
     hnames = filter_by_stype(snames, ST_HOLE)
 
-    if not holes or not holes_bd:
+    if holes is None or holes_bd is None:
         holes = holes_row()
         holes_bd = boundary_row()
         hnames = []
@@ -810,6 +810,7 @@ def gen_holes_df(snames, points, edges, tris, holes=None, holes_bd=None):
         pass
 
     newholes = fix_type_holes(newholes)
+    newholes_bd = fix_type_bd(newholes_bd)
     newholes_mids = fix_type_points(newholes_mids)
     return newholes, newholes_bd, newholes_mids, to_remove
 
@@ -825,6 +826,7 @@ def gen_holes_data(snames, points_data, edges_data, tris_data, holes_data, **kwa
         :param kwargs:
         :return: tuple of update dicts
     """
+    print(f">>> gen_holes_data >>>")
     # params ------------------------------------------------------------------
     holes_color = kwargs.get("hole_color", COLORS_DICT[SC_HOLES])
     holes_mid_color = kwargs.get("hole_mid_color", COLORS_DICT[SC_HOLES_MID])
@@ -859,6 +861,7 @@ def gen_holes_data(snames, points_data, edges_data, tris_data, holes_data, **kwa
                 .drop(index=to_remove['holes'])
                 .pipe(_log_set_index, 'eid', "gen_holes_data : holes_bd")
                 .append(newholes_bd)
+                .pipe(fix_type_bd)
     )
 
     # fix cofaces of edges
@@ -899,7 +902,7 @@ def gen_holes_data(snames, points_data, edges_data, tris_data, holes_data, **kwa
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#                   PLOTLY GENEREATION
+#                   PLOTLY DATA GENERATION
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def gen_plotly_edges(points, edges,
                      edge_color=COLORS_DICT[SC_EDGES], edge_mid_color=COLORS_DICT[SC_EDGES_MID]):
@@ -1045,6 +1048,7 @@ def get_boundary(snames, tris, holes_bd, **kwargs):
 
 
 def get_tris_boundary(tnames: list, tris, drop_zeros=True, **kwargs) -> pd.DataFrame:
+    print(f">>> get_tris_boundry >>>")
     tris = _log_set_index(tris, "name", "gen_tris_bd : tris")
     if tnames:
         # tris = tris.set_index('name', drop=False).loc[tnames]
@@ -1248,6 +1252,7 @@ def get_ort_edge(ename, ort, edges):
 
 def get_ort_edge_row(edge_row, ort):
     edge_row = edge_row.copy()
+    print(f">>> get_ort_edge_row >>> ort=({ort}, {type(ort)})")
     if isinstance(edge_row, pd.Series):
         edge = (edge_row.at['pid_1'], edge_row.at['pid_2'])
         edge_row.at['pid_1'], edge_row.at['pid_2'] = edge[::ort]
@@ -1485,7 +1490,7 @@ def upd_trace_tris(ids=None) -> go.Figure:
     tris_data = main_data['tris']
     plotly_tris = tris_data['plotly']
 
-    # print("\n>>> plotly tris <<<")
+    print("\n>>> plotly tris <<<")
     # print(f"{plotly_tris['id']}")
     # print("\n-------------------")
 
@@ -1541,11 +1546,55 @@ def upd_trace_tris_hl(plotly_hl, hl_color) -> go.Figure:
     return get_main_figure()
 
 
+def upd_trace_holes() -> go.Figure:
+    global main_figure, main_data
+    holes_data = main_data['holes']
+    plotly_holes = holes_data['plotly']
+
+    main_figure.update_traces(dict(
+        ids=plotly_holes['name'],
+        x=plotly_holes['x'], y=plotly_holes['y'],
+        mode='lines', marker=None,
+        fill="toself", fillcolor=holes_data['color'], opacity=0.75,
+        line_width=0,
+        hovertext=[], hoverinfo="none"
+    ), selector=dict(name=SC_HOLES))
+
+    return get_main_figure()
+
+
+def upd_trace_holes_mid() -> go.Figure:
+    global main_figure, main_data
+    holes_data = main_data['holes']
+    plotly_mids = holes_data['plotly_mids']
+
+    main_figure.update_traces(dict(
+        ids=plotly_mids['name'],
+        x=plotly_mids['x'], y=plotly_mids['y'],
+        mode='markers',
+        marker_size=MID_CONFIG['marker_size'], marker_opacity=MID_CONFIG['opacity'],
+        marker_color=plotly_mids['color'],
+        hoverinfo='text',
+        hovertext=plotly_mids['name'],
+        hoverlabel_font_color="white",
+        customdata=plotly_mids['customdata']
+    ), selector=dict(name=SC_HOLES_MID))
+
+    return get_main_figure()
+
+
+def upd_trace_holes_hl() -> go.Figure:
+    global main_figure, main_data
+    return get_main_figure()
+
+
 def make_trace_edges():
     pass
 
+
 def make_trace_tris():
     pass
+
 
 # deprecated / do not use
 def make_plotly_data(points, simplices):
@@ -1599,7 +1648,7 @@ def make_triangulation(x, y):
 ###############################################################################
 #                   USAGE / SCENARIOS / CONTROL
 ###############################################################################
-def Random_Cloud(n, **kwargs) -> go.Figure:
+def RandomCloud(n, **kwargs) -> go.Figure:
     """
     Generate ``n`` random points and
     put them on the figure
@@ -1657,14 +1706,38 @@ def Triangulate(**kwargs) -> go.Figure:
     return get_main_figure()
 
 
-def MakeHoles(tnames: list, **kwargs) -> go.Figure:
+def MakeHoles(snames: list, **kwargs) -> go.Figure:
     """
     Make holes
-        :param tnames:
+        :param snames:
         :param kwargs:
         :return:
     """
     global main_figure, main_data
+    if ('data' not in main_data['points']
+            or 'data' not in main_data['edges']
+            or 'data' not in main_data['tris']):
+        return get_main_figure()
+    main_data['holes']['data'] = main_data['holes'].get('data', holes_row())
+    main_data['holes']['bd'] = main_data['holes'].get('bd', boundary_row())
+    points_dict, edges_dict, tris_dict, holes_dict = gen_holes_data(
+        snames, main_data['points'], main_data['edges'], main_data['tris'], main_data['holes'], **kwargs
+    )
+    print(f">>> MakeHoles >>> upd data")
+    main_data['points'].update(points_dict)
+    main_data['edges'].update(edges_dict)
+    main_data['tris'].update(tris_dict)
+    main_data['holes'].update(holes_dict)
+
+    print(f">>> MakeHoles >>> upd traces")
+    upd_trace_points()
+    upd_trace_edges()
+    upd_trace_edges_mid()
+    upd_trace_tris()
+    upd_trace_tris_mid()
+    upd_trace_holes()
+    upd_trace_holes_mid()
+
     return get_main_figure()
 
 

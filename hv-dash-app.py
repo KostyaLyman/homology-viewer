@@ -222,8 +222,6 @@ holes_tab_row = dbc.Row(children=[
     ])
 ], className='mb-0')
 
-
-
 simplex_tabs_row = dbc.Row([dbc.Col([
     # dbc.Card([
         dbc.Tabs(id='simplex-tabs', active_tab=scx.ST_POINT, class_name='nav-pills nav-justified',
@@ -342,13 +340,13 @@ app.layout = html.Div([
             Input('reset-button', 'n_clicks'),
             State('simplex-tabs', 'active_tab')]
 )
-def display_click_data(clickData, selectData, reset_click, stype):
-    print(f"%%% select data %%% {selectData and selectData['points']}")
+def display_click_data(clickData, selected, reset_click, stype):
+    print(f"%%% selected data %%% {selected and selected['points']}")
     seleced_points = 0
     tris_table = dbc.Table()
-    if selectData and selectData['points']:
-        snames = [pts['id'] for pts in selectData['points']]
-        print(f"%%% select data %%% {snames}")
+    if selected and selected['points']:
+        snames = [pts['id'] for pts in selected['points']]
+        print(f"%%% selected names %%% {snames}")
 
         if stype == scx.ST_POINT:
             pnames = set(scx.filter_by_stype(snames, scx.ST_POINT))
@@ -366,7 +364,7 @@ def display_click_data(clickData, selectData, reset_click, stype):
                 '# triangles': len(tnames),
                 'area': 10
             }))
-            tris_table = dbc.Table.from_dataframe(tris_stats, bordered=True, hover=True, index=True)
+            # tris_table = dbc.Table.from_dataframe(tris_stats, bordered=True, hover=True, index=True)
 
     else:
         scx.clear_highlighting()
@@ -374,7 +372,7 @@ def display_click_data(clickData, selectData, reset_click, stype):
     json_dump = "@@@ click @@@" + \
                 json.dumps(clickData, indent=2) + \
                 "\n@@@ select @@@\n" + \
-                json.dumps(selectData, indent=2) + \
+                json.dumps(selected, indent=2) + \
                 "\n@@@ magic @@@\n" + \
                 json.dumps({"magic": reset_click})
 
@@ -435,14 +433,15 @@ def random_cloud(rnd_click, rnd_size):
     if rnd_click is not None:
         rnd_size = rnd_size if rnd_size else 15
         # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
-        scx.Random_Cloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        scx.RandomCloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
         # scx.show_hide_points(scx.ST_POINT)
 
     return scx.get_main_figure(), scx.ST_POINT
 
 
 @app.callback(
-    output=Output('main-figure', 'figure'),
+    output=[Output('main-figure', 'figure'),
+            Output('simplex-tabs', 'active_tab')],
     inputs=[Input('sci-button', 'n_clicks')]
 )
 def triangulate_cloud(sci_click):
@@ -453,11 +452,30 @@ def triangulate_cloud(sci_click):
     if sci_click is not None:
         scx.Triangulate()
 
+    return scx.get_main_figure(), scx.ST_POINT
+
+
+@app.callback(
+    output=[Output('main-figure', 'figure')],
+    inputs=[Input('make-holes-button', 'n_clicks'),
+            State('main-figure', 'selectedData')]
+)
+def make_holes(mkholes_click, selected):
+    print(f"\n================\n" +
+          f" [{mkholes_click}] : make holes " +
+          f"\n================\n")
+    if mkholes_click and selected and selected['points']:
+        snames = [pts['id'] for pts in selected['points']]
+        print(f"%%% mk_holes :: selected names %%% {snames}")
+        _, _, tnames, hnames = scx.filter_by_stypes(snames, by_points=False, by_edges=False)
+        snames = list(set(tnames + hnames))
+        scx.MakeHoles(snames)
     return scx.get_main_figure()
 
 
 @app.callback(
-    output=Output('main-figure', 'figure'),
+    output=[Output('main-figure', 'figure'),
+            Output('simplex-tabs', 'active_tab')],
     inputs=[Input('reset-button', 'n_clicks')]
 )
 def reset_figure(reset_click):
@@ -465,7 +483,8 @@ def reset_figure(reset_click):
           f" [{reset_click}] : reset_figure " +
           f"\n================\n")
     scx.main_figure = scx.reset_fig()
-    return scx.get_main_figure()
+    return scx.get_main_figure(), scx.ST_POINT
+
 
 # -----------------------------------------------------------------------------
 #                 ===== RUN DASH SERVER =====

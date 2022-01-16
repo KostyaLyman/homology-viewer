@@ -56,7 +56,7 @@ class TestSimcomplex(unittest.TestCase):
 
         # test random cloud -------------------------------
         scx.setup_fig()
-        fig = scx.Random_Cloud(n=N_POINTS, xlim=xmax, ylim=ylim, color="red")
+        fig = scx.RandomCloud(n=N_POINTS, xlim=xmax, ylim=ylim, color="red")
         self.assertIsNotNone(fig, "fig is none")
         self.assertEqual(xlim, fig.layout.xaxis.range, "xlim is wrong")
         self.assertEqual(ylim, fig.layout.yaxis.range, "ylim is wrong")
