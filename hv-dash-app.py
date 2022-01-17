@@ -236,8 +236,7 @@ simplex_tabs_row = dbc.Row([dbc.Col([
                      dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=True)
                  ])
     # ])
-])
-])
+])])
 
 simplex_tabs_card = dbc.Card(children=[
     # dbc.CardHeader(tabs_row),
@@ -245,7 +244,7 @@ simplex_tabs_card = dbc.Card(children=[
     dbc.CardBody(simplex_tabs_row)
 ], className='mt-0 mb-0', color="info", outline=True)
 
-main_tabs_content = {
+main_tabs_content_dict = {
     'main-tab-scx': [
         buttons_card,
         html.P(),
@@ -273,8 +272,8 @@ main_tabs_card = dbc.Card([
     dbc.CardHeader(main_tabs_row, class_name="mb-0 ml-6 pl-5"),
     # dbc.CardBody(html.Div(id='main-tabs-content-div'))
     dbc.CardBody([dbc.Row([dbc.Col([
-        dbc.Collapse(id='main-tab-scx-collapse', is_open=True, children=main_tabs_content['main-tab-scx']),
-        dbc.Collapse(id='main-tab-ntk-collapse', is_open=False, children=main_tabs_content['main-tab-ntk'])
+        dbc.Collapse(id='main-tab-scx-collapse', is_open=True, children=main_tabs_content_dict['main-tab-scx']),
+        dbc.Collapse(id='main-tab-ntk-collapse', is_open=False, children=main_tabs_content_dict['main-tab-ntk'])
     ])])])
 ], className='mt-0 mb-0', color="success", outline=True)
 
@@ -286,6 +285,29 @@ click_data_row = dbc.Row(html.Div(
     style={'height': '800px', 'width': '400px'}
 ))
 
+debug_tabs = ["points", "mids",
+              "edges", "edges_plotly", "edges_plotly_mid",
+              "tris", "tris_plotly", "tris_plotly_mid",
+              "holes", "holes_plotly", "holes_plotly_mid", "holes_bd",
+              "cache_bd",
+              ]
+debug_data_row = dbc.Row([dbc.Col([dbc.Card([
+        dbc.CardHeader(dbc.Row([dbc.Col([
+            dbc.Tabs(id='debug-tabs', active_tab='points', class_name='nav-pills nav-justified',
+                     children=[
+                         dbc.Tab(label=dt, tab_id=dt) for dt in debug_tabs
+                     ])
+        ])]), class_name="mb-0 ml-6 pl-5"),
+        dbc.CardBody([dbc.Row([dbc.Col([
+            html.Div([dbc.Switch(
+                id='debug-customdata-switch', label='customdata', value=True
+            )]),
+            html.P(),
+            html.Div(id='debug-data')
+        ])], style={'overflowY': 'scroll', 'overflowX': 'scroll'})
+        ])
+    ], className='mt-0 mb-0', color="primary", outline=True)
+])])
 
 # -----------------------------------------------------------------------------
 #                 ===== LAYOUT / APP =====
@@ -299,10 +321,17 @@ app.layout = html.Div([
         children=[
             # Main Graph ----------------------------------
             dbc.Col(
-                width=7,
+                width=8,
                 children=[
-                    dcc.Graph(id="main-figure")
-                ], style={'overflowY': 'scroll', 'overflowX': 'scroll', 'height': 800, 'width': 800},
+                    dbc.Row(
+                        [dcc.Graph(id="main-figure")],
+                        # style={'overflowY': 'scroll', 'overflowX': 'scroll', 'height': 750, 'width': 750}
+                        style={'overflowY': 'scroll', 'overflowX': 'scroll'}
+                    ),
+                    debug_data_row
+                # ], style={'overflowY': 'scroll', 'overflowX': 'scroll', 'height': 800, 'width': 800},
+                # ], style={'height': 800, 'width': 800},
+                ],
                 className='pr-4'
             ),
             # Right Side ----------------------------------
@@ -410,7 +439,7 @@ def show_simplices_tabs(active_tab):
             Output('main-tab-ntk-collapse', 'is_open')],
     inputs=Input('main-tabs', 'active_tab')
 )
-def main_tabs_to_content(active_tab):
+def show_main_tabs_content(active_tab):
     tab_content = {
         'main-tab-scx': (True, False),
         'main-tab-ntk': (False, True)
@@ -418,6 +447,19 @@ def main_tabs_to_content(active_tab):
 
     tab_scx, tab_ntk = tab_content.get(active_tab, (False, False))
     return tab_scx, tab_ntk
+
+@app.callback(
+    output=Output('debug-data', 'children'),
+    inputs=[Input('debug-tabs', 'active_tab'),
+            Input('debug-customdata-switch', 'value')]
+)
+def show_debug_data(debug_tab, show_customdata):
+    debug_data = scx.get_data_df(debug_tab)
+    if not show_customdata and 'customdata' in debug_data.columns:
+        debug_data = debug_data.drop(columns='customdata')
+
+    debug_table = dbc.Table.from_dataframe(debug_data, bordered=True, hover=True, index=False)
+    return debug_table
 
 
 @app.callback(

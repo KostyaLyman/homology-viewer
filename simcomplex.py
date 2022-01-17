@@ -73,23 +73,25 @@ COLORS_DICT = {
     SC_TRIS_MID: 'rgba(49, 33, 2, 1)',          # hsl = 40°, 92%, 10%
     SC_TRIS_HL: 'rgba(168, 63, 19, 1)',         # hsl = 18°, 80%, 37%
 
-    SC_HOLES: 'rgba(156, 28, 169, 1)',          # hsl = 295°, 84%, 66%
-    SC_HOLES_MID: 'rgba(212, 23, 231, 1)',      # hsl = 295°, --------
-    SC_HOLES_HL: 'rgba(138, 85, 192, 1)',       # hsl = 270°, --------
+    SC_HOLES: 'rgba(109, 127, 147, 1)',          # hsl = 210°, 15%, 50%
+    SC_HOLES_MID: 'rgba(16, 89, 162, 1)',        # hsl = 210°, 82%, 35%
+    SC_HOLES_HL: 'rgba(58, 195, 223, 1)',        # hsl = 190°, 72%, 55%
 }
 
 # model
 EMPTY_DATA = dict(
-    holes=dict(sc_names=[SC_HOLES, SC_HOLES_HL, SC_HOLES_MID]),
-    tris=dict(sc_names=[SC_TRIS, SC_TRIS_HL, SC_TRIS_MID]),
-    edges=dict(sc_names=[SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID]),
-    points=dict(sc_names=[SC_POINTS])
+    cache=dict(),
+    holes=dict(sc_names=(SC_HOLES, SC_HOLES_HL, SC_HOLES_MID)),
+    tris=dict(sc_names=(SC_TRIS, SC_TRIS_HL, SC_TRIS_MID)),
+    edges=dict(sc_names=(SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID)),
+    points=dict(sc_names=(SC_POINTS, ))
 )
 main_data = EMPTY_DATA
 
 # view
 main_layout = EMPTY_LAYOUT
 main_figure = go.Figure(layout=main_layout)
+
 
 # -----------------------------------------------------------------------------
 #               UTILITY
@@ -175,9 +177,11 @@ def get_tname(tid):
     tname = f"{ST_TRI}{tid:04d}"
     return tname
 
+
 def get_hname(hid):
     hname = f"{ST_HOLE}{hid:04d}"
     return hname
+
 
 def parse_sname(name):
     try:
@@ -187,6 +191,7 @@ def parse_sname(name):
         stype, sid = None, 0
     finally:
         return stype, sid
+
 
 # -----------------------------------------------------------------------------
 #               GETTER / SETTER
@@ -207,6 +212,33 @@ def get_data(stype) -> dict:
     return main_data[skey]
 
 
+def get_data_df(df_name) -> pd.DataFrame:
+    global main_data
+    points = main_data['points'].get('data', points_row())
+    lookup_df = dict(
+        points=lambda: points,
+        mids=lambda: points[points['mp_pointer'].notna()],
+        edges=lambda: main_data['edges'].get('data', edges_row()),
+        edges_plotly=lambda: main_data['edges'].get('plotly', plotly_row()),
+        edges_plotly_mid=lambda: main_data['edges'].get('plotly_mids', plotly_row()),
+        tris=lambda: main_data['tris'].get('data', tris_row()),
+        tris_plotly=lambda: main_data['tris'].get('plotly', plotly_row()),
+        tris_plotly_mid=lambda: main_data['tris'].get('plotly_mids', plotly_row()),
+        holes=lambda: main_data['holes'].get('data', holes_row()),
+        holes_plotly=lambda: main_data['holes'].get('plotly', plotly_row()),
+        holes_plotly_mid=lambda: main_data['holes'].get('plotly_mids', plotly_row()),
+        holes_bd=lambda: main_data['holes'].get('bd', boundary_row()),
+        cache_bd=lambda: main_data['cache'].get('bd', boundary_row())
+    )[df_name]
+    return lookup_df()
+
+
+def cache_bd(bd):
+    global main_data
+    print(f">>> >>> CACHE BD <<< <<<")
+    main_data['cache']['bd'] = bd.copy()
+
+
 def set_margin():
     """handle change of margins"""
     pass
@@ -218,7 +250,7 @@ def reset_fig() -> go.Figure:
     global main_figure, main_data
 
     main_data = EMPTY_DATA
-    sc_names = [scn for data in main_data.values() for scn in data['sc_names']]
+    sc_names = [scn for data in main_data.values() for scn in data.get('sc_names', [])]
     empty_sc = [go.Scatter(name=scn) for scn in sc_names]
 
     # go.Figure creates a lot of supporting data for each trace
@@ -238,7 +270,7 @@ def setup_fig(layout=main_layout) -> go.Figure:
     global main_figure, main_data
 
     main_data = EMPTY_DATA
-    sc_names = [scn for data in main_data.values() for scn in data['sc_names']]
+    sc_names = [scn for data in main_data.values() for scn in data.get('sc_names', [])]
     empty_sc = [go.Scatter(name=scn) for scn in sc_names]
 
     main_figure = go.Figure(
@@ -685,12 +717,14 @@ def gen_triangulation_data(simplices, points_df, **kwargs):
     )
 
     edges_dict = dict(
-        data=edges_df, plotly=plotly_edges, plotly_mids=plotly_edges_mid,
+        data=edges_df,
+        plotly=plotly_edges, plotly_mids=plotly_edges_mid,
         color=edge_color, mid_color= edge_mid_color, edge_width=edge_width
     )
 
     tris_dict = dict(
-        data=tris_df, plotly=plotly_tris, plotly_mids=plotly_tris_mid,
+        data=tris_df,
+        plotly=plotly_tris, plotly_mids=plotly_tris_mid,
         color=tri_color, mid_color=tri_mid_color
     )
 
@@ -734,9 +768,9 @@ def gen_holes_df(snames, points, edges, tris, holes=None, holes_bd=None):
 
     # n = len(snames)
     HID_MAX = holes["id"].max()
-    HID_MAX = HID_MAX + 1 if HID_MAX and pd.notna(HID_MAX) else 1
+    HID_MAX = int(HID_MAX + 1 if HID_MAX and pd.notna(HID_MAX) else 1)
     PID_MAX = points['id'].max()
-    PID_MAX = PID_MAX + 1 if PID_MAX and pd.notna(PID_MAX) else 1
+    PID_MAX = int(PID_MAX + 1 if PID_MAX and pd.notna(PID_MAX) else 1)
 
     # points = set_my_index(points[points['mp_pointer'].isna()], "id", "gen_holes : pts")
     mids = _log_set_index(points[points['mp_pointer'].notna()], "id", "gen_holes : mids")
@@ -1044,6 +1078,7 @@ def get_boundary(snames, tris, holes_bd, **kwargs):
     )
     tris_bd = get_tris_boundary(tnames, tris, **kwargs)
     bd = add_boundaries(tris_bd, holes_bd, **kwargs)
+    cache_bd(bd)
     return bd
 
 
@@ -1718,8 +1753,10 @@ def MakeHoles(snames: list, **kwargs) -> go.Figure:
             or 'data' not in main_data['edges']
             or 'data' not in main_data['tris']):
         return get_main_figure()
-    main_data['holes']['data'] = main_data['holes'].get('data', holes_row())
-    main_data['holes']['bd'] = main_data['holes'].get('bd', boundary_row())
+    # main_data['holes']['data'] = main_data['holes'].get('data', holes_row())
+    # main_data['holes']['bd'] = main_data['holes'].get('bd', boundary_row())
+    main_data['holes']['data'] = get_data_df('holes')
+    main_data['holes']['bd'] = get_data_df('holes_bd')
     points_dict, edges_dict, tris_dict, holes_dict = gen_holes_data(
         snames, main_data['points'], main_data['edges'], main_data['tris'], main_data['holes'], **kwargs
     )
@@ -1878,10 +1915,10 @@ def highlight_triangles(tri_names: list, **kwargs) -> go.Figure:
     return get_main_figure()
 
 
-def highlight_boundary(tri_names: list, **kwargs) -> go.Figure:
+def highlight_boundary(tnames: list, **kwargs) -> go.Figure:
     """
     Highlights the border of a list of triangles
-        :param tri_names:
+        :param tnames:
         :param kwargs:
         :return:
     """
@@ -1892,8 +1929,10 @@ def highlight_boundary(tri_names: list, **kwargs) -> go.Figure:
     if 'data' not in main_data['tris']:
         return get_main_figure()
 
-    tris_df = main_data['tris']['data']
-    boundary = get_tris_boundary(tri_names, tris_df)
+    tris_df = get_data_df('tris')
+    holes_bd = get_data_df('holes_bd')
+    # boundary = get_tris_boundary(tnames, tris_df)
+    boundary = get_boundary(tnames, tris_df, holes_bd)
 
     pos_boundary = boundary.loc[boundary.ort == 1]
     neg_boundary = boundary.loc[boundary.ort == -1]
