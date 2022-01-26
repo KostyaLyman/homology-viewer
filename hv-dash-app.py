@@ -389,12 +389,14 @@ def display_click_data(clickData, selected, reset_click, stype):
         if stype == scx.ST_TRI:
             tnames = set(scx.filter_by_stype(snames, scx.ST_TRI))
             scx.highlight_triangles(tnames)
-            tris_stats = pd.DataFrame(dict(stats={
-                '# triangles': len(tnames),
-                'area': 10
-            }))
+            # tris_stats = pd.DataFrame(dict(stats={
+            #     '# triangles': len(tnames),
+            #     'area': 10
+            # }))
             # tris_table = dbc.Table.from_dataframe(tris_stats, bordered=True, hover=True, index=True)
         if stype == scx.ST_HOLE:
+            hnames = set(scx.filter_by_stype(snames, scx.ST_HOLE))
+            scx.highlight_holes(hnames)
             pass
 
     else:
@@ -503,9 +505,10 @@ def triangulate_cloud(sci_click):
 @app.callback(
     output=[Output('main-figure', 'figure')],
     inputs=[Input('make-holes-button', 'n_clicks'),
-            State('main-figure', 'selectedData')]
+            State('main-figure', 'selectedData'),
+            State('simplex-tabs', 'active_tab')]
 )
-def make_holes(mkholes_click, selected):
+def make_holes(mkholes_click, selected, active_tab):
     print(f"\n================\n" +
           f" [{mkholes_click}] : make holes " +
           f"\n================\n")
@@ -516,6 +519,8 @@ def make_holes(mkholes_click, selected):
         snames = list(set(tnames + hnames))
         print(f"%%% mk_holes :: filtered names %%% {snames}")
         scx.MakeHoles(snames)
+        scx.show_hide_points(active_tab, mode='opacity')
+
     return scx.get_main_figure()
 
 

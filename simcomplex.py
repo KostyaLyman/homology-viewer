@@ -125,16 +125,17 @@ def _has_unique_value(df, col):
     return (a[0] == a).all()
 
 
-def get_stype(name: str):
+def get_stype(sname: str):
     # if type(name) is not str:
     #     raise Exception("name is not string", name)
 
-    stype = name[0]
+    stype = sname[0]
     if stype not in SIMPLEX_TYPES:
-        raise ValueError("get_stype: extracted type is not known", stype, name)
+        raise ValueError("get_stype: extracted type is not known", stype, sname)
 
     return stype
 
+# TODO: has_stype(sname, stype)
 
 def filter_by_stype(snames: list, stype) -> list:
     filtered_names = list(filter(lambda name: get_stype(name) == stype, snames))
@@ -165,11 +166,6 @@ def get_ename(eid):
 
 
 def get_enames(eids):
-    # enames = []
-    # for eid in eids:
-    #     # TODO: rewrite without loop (apply, reduce, map)
-    #     ename = f"{ST_EDGE}{eid:04d}"
-    #     enames.append(ename)
     enames = list(map(get_ename, eids))
     return enames
 
@@ -1056,11 +1052,13 @@ def get_boundary(snames, tris, holes_bd, **kwargs):
 
 def get_tris_boundary(tnames: list, tris, drop_zeros=True, **kwargs) -> pd.DataFrame:
     print(f">>> get_tris_boundary >>> {tnames}")
-    tris = _log_set_index(tris, "name", "gen_tris_bd : tris")
-    if tnames:
-        tris = tris.loc[tnames]
+    if tnames is None:
+        return boundary_row()
+    # if tnames:
+    tris = tris.loc[tnames]
 
     bd = boundary_row()
+    tris = _log_set_index(tris, "name", "gen_tris_bd : tris")
     for tname, tri in tris.iterrows():
         for e in range(1, 4):
             eid, ort = tri[f"eid_{e}"], tri[f"ort_{e}"]
@@ -1574,8 +1572,16 @@ def upd_trace_holes_mid() -> go.Figure:
     return get_main_figure()
 
 
-def upd_trace_holes_hl() -> go.Figure:
+def upd_trace_holes_hl(plotly_hl, hl_color) -> go.Figure:
     global main_figure, main_data
+    main_figure.update_traces(dict(
+        ids=plotly_hl['name'],
+        x=plotly_hl['x'], y=plotly_hl['y'],
+        mode='lines', marker=None,
+        fill="toself", fillcolor=hl_color, opacity=0.5,
+        line_width=0,
+        hovertext=[], hoverinfo="none"
+    ), selector=dict(name=SC_HOLES_HL))
     return get_main_figure()
 
 
@@ -1703,7 +1709,7 @@ def show_hide_points(stype, mode='visibility') -> go.Figure:
         SC_POINTS: 1,
         SC_EDGES_MID: MID_CONFIG['opacity'],
         SC_TRIS_MID: MID_CONFIG['opacity'],
-        SC_HOLES: MID_CONFIG['opacity']
+        SC_HOLES_MID: MID_CONFIG['opacity']
     }
 
     def set_opacity(sc_name, visible):
@@ -1764,11 +1770,11 @@ def highlight_points(pts_names: list, **kwargs) -> go.Figure:
     return get_main_figure()
 
 
-def highlight_edges(edge_names: list, **kwargs) -> go.Figure:
+def highlight_edges(enames: list, **kwargs) -> go.Figure:
     """
     Highlights a set of edges with one color:
     all edges are taken with positive orientation
-        :param edge_names: edges to highlight
+        :param enames: edges to highlight
         :param kwargs: hl_color, sc_name
         :return:
     """
@@ -1780,17 +1786,17 @@ def highlight_edges(edge_names: list, **kwargs) -> go.Figure:
         return get_main_figure()
 
     plotly_edges = main_data['edges']['plotly']
-    plotly_hl = gen_plotly_hl(edge_names, plotly_edges, hl_color)
+    plotly_hl = gen_plotly_hl(enames, plotly_edges, hl_color)
 
     upd_trace_edges_hl(sc_name, plotly_hl, hl_color)
 
     return get_main_figure()
 
 
-def highlight_triangles(tri_names: list, **kwargs) -> go.Figure:
+def highlight_triangles(tnames: list, **kwargs) -> go.Figure:
     """
     Highlight a set of triangles
-        :param tri_names:
+        :param tnames:
         :param kwargs:
         :return:
     """
@@ -1801,22 +1807,46 @@ def highlight_triangles(tri_names: list, **kwargs) -> go.Figure:
         return get_main_figure()
 
     plotly_tris = main_data['tris']['plotly']
-    plotly_hl = gen_plotly_hl(tri_names, plotly_tris, hl_color)
+    plotly_hl = gen_plotly_hl(tnames, plotly_tris, hl_color)
 
     upd_trace_tris_hl(plotly_hl, hl_color)
-    highlight_boundary(tri_names)
+    highlight_boundary(tnames, **kwargs)
 
     return get_main_figure()
 
 
-def highlight_boundary(tnames: list, **kwargs) -> go.Figure:
+def highlight_holes(hnames: list, **kwargs) -> go.Figure:
     """
-    Highlights the border of a list of triangles
-        :param tnames:
+    Highlight a set of triangles
+        :param hnames:
         :param kwargs:
         :return:
     """
-    neg_color, pos_color = COLORS_DICT[SC_EDGES_NEG_HL], COLORS_DICT[SC_EDGES_HL][1]
+    hl_color = kwargs.get("hl_color", COLORS_DICT[SC_HOLES_HL])
+
+    global main_figure, main_data
+    if 'plotly' not in main_data['holes']:
+        return get_main_figure()
+
+    plotly_holes = main_data['holes']['plotly']
+    plotly_hl = gen_plotly_hl(hnames, plotly_holes, hl_color)
+
+    upd_trace_tris_hl(plotly_hl, hl_color)
+    highlight_boundary(hnames, **kwargs)
+
+    return get_main_figure()
+
+
+
+def highlight_boundary(snames: list, **kwargs) -> go.Figure:
+    """
+    Highlights the border of a list of triangles
+        :param snames:
+        :param kwargs:
+        :return:
+    """
+    neg_color = kwargs.get("neg_color", COLORS_DICT[SC_EDGES_NEG_HL])
+    pos_color = kwargs.get("pos_color", COLORS_DICT[SC_EDGES_HL][1])
     is_Z_2 = kwargs.get("Z_2", False)
 
     global main_figure, main_data
@@ -1825,8 +1855,7 @@ def highlight_boundary(tnames: list, **kwargs) -> go.Figure:
 
     tris_df = get_data_df('tris')
     holes_bd = get_data_df('holes_bd')
-    # boundary = get_tris_boundary(tnames, tris_df)
-    boundary = get_boundary(tnames, tris_df, holes_bd)
+    boundary = get_boundary(snames, tris_df, holes_bd)
 
     pos_boundary = boundary.loc[boundary.ort == 1]
     neg_boundary = boundary.loc[boundary.ort == -1]
