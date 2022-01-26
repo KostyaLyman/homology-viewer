@@ -56,7 +56,7 @@ SC_TRACES = \
     SC_HOLES, SC_HOLES_MID, SC_HOLES_HL
 
 SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID, ST_HOLE: SC_HOLES_MID}
-MID_TYPES = SC_MIDS.keys()
+# MID_TYPES = SC_MIDS.keys()
 MID_CONFIG = dict(marker_size=10, opacity=0.3)
 
 # colors for vertices, edges and 2-simplexes
@@ -228,7 +228,8 @@ def get_data_df(df_name) -> pd.DataFrame:
         holes_plotly=lambda: main_data['holes'].get('plotly', plotly_row()),
         holes_plotly_mid=lambda: main_data['holes'].get('plotly_mids', plotly_row()),
         holes_bd=lambda: main_data['holes'].get('bd', boundary_row()),
-        cache_bd=lambda: main_data['cache'].get('bd', boundary_row())
+        cache_bd=lambda: main_data['cache'].get('bd', boundary_row()),
+        cache_plotly_hl=lambda: main_data['cache'].get('plotly_hl', plotly_row()),
     )[df_name]
     return lookup_df()
 
@@ -237,6 +238,14 @@ def cache_bd(bd):
     global main_data
     print(f">>> >>> CACHE BD <<< <<<")
     main_data['cache']['bd'] = bd.copy()
+    pass
+
+
+def cache_plotly_hl(plotly_hl):
+    global main_data
+    print(f">>> >>> CACHE PLOTLY HL <<< <<<")
+    main_data['cache']['plotly_hl'] = plotly_hl.copy()
+    pass
 
 
 def set_margin():
@@ -916,7 +925,8 @@ def gen_holes_data(snames, points_data, edges_data, tris_data, holes_data, **kwa
 
     # update dicts ------------------------------------------------------------
     points_dict = dict(
-        data=points_df, plotly=points_df
+        data=points_df, plotly=points_df,
+        n=points_df['mp_pointer'].isna().sum()
     )
 
     edges_dict = dict(
@@ -1053,10 +1063,11 @@ def gen_plotly_hl(names, plotly_df, hl_color):
         :param hl_color:
         :return:
     """
-    plotly_df = _log_set_index(plotly_df, "name", "gen_plotly_hl : plotly_df")
+    plotly_df = _log_set_index(plotly_df, "name", f"gen_plotly_hl : plotly_df <- {hl_color}")
     plotly_df = plotly_df.loc[names]
     if not plotly_df.empty:
         plotly_df.loc[:, "color"] = hl_color
+    cache_plotly_hl(plotly_df)
     return plotly_df
 
 
@@ -1083,7 +1094,7 @@ def get_boundary(snames, tris, holes_bd, **kwargs):
 
 
 def get_tris_boundary(tnames: list, tris, drop_zeros=True, **kwargs) -> pd.DataFrame:
-    print(f">>> get_tris_boundry >>>")
+    print(f">>> get_tris_boundary >>> {tnames}")
     tris = _log_set_index(tris, "name", "gen_tris_bd : tris")
     if tnames:
         # tris = tris.set_index('name', drop=False).loc[tnames]
@@ -1860,7 +1871,7 @@ def highlight_points(pts_names: list, **kwargs) -> go.Figure:
     # plotly_pts = set_my_index(plotly_pts[plotly_pts['mp_pointer'].isna()], 'name', "highlight_pts : plotly_pts")
     plotly_pts = plotly_pts[plotly_pts['mp_pointer'].isna()]
 
-    marker_size = pd.Series([pts_data['marker_size']] * pts_data['n'], index=plotly_pts['name'])
+    marker_size = pd.Series([pts_data['marker_size']] * plotly_pts.shape[0], index=plotly_pts['name'])
     marker_size.loc[pts_names] = pts_data['marker_size'] * hl_mult
     main_figure.update_traces(dict(
         marker_size=marker_size

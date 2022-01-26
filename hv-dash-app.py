@@ -233,7 +233,7 @@ simplex_tabs_row = dbc.Row([dbc.Col([
                              ),
                      dbc.Tab(label='Edges', tab_id=scx.ST_EDGE, children=[edges_tab_row]),
                      dbc.Tab(label='Triangles', tab_id=scx.ST_TRI, children=[tris_tab_row]),
-                     dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=True)
+                     dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=False)
                  ])
     # ])
 ])])
@@ -289,7 +289,7 @@ debug_tabs = ["points", "mids",
               "edges", "edges_plotly", "edges_plotly_mid",
               "tris", "tris_plotly", "tris_plotly_mid",
               "holes", "holes_plotly", "holes_plotly_mid", "holes_bd",
-              "cache_bd",
+              "cache_bd", "cache_plotly_hl"
               ]
 debug_data_row = dbc.Row([dbc.Col([dbc.Card([
         dbc.CardHeader(dbc.Row([dbc.Col([
@@ -366,7 +366,7 @@ app.layout = html.Div([
             ],
     inputs=[Input('main-figure', 'clickData'),
             Input('main-figure', 'selectedData'),
-            Input('reset-button', 'n_clicks'),
+            State('reset-button', 'n_clicks'),
             State('simplex-tabs', 'active_tab')]
 )
 def display_click_data(clickData, selected, reset_click, stype):
@@ -394,6 +394,8 @@ def display_click_data(clickData, selected, reset_click, stype):
                 'area': 10
             }))
             # tris_table = dbc.Table.from_dataframe(tris_stats, bordered=True, hover=True, index=True)
+        if stype == scx.ST_HOLE:
+            pass
 
     else:
         scx.clear_highlighting()
@@ -476,6 +478,7 @@ def random_cloud(rnd_click, rnd_size):
         rnd_size = rnd_size if rnd_size else 15
         # scx.random_cloud(rnd_size, xlim=(0.0, 1.0), ylim=(0.0, 1.0))
         scx.RandomCloud(rnd_size, xlim=(0.0, 300.0), ylim=(0.0, 300.0))
+        scx.Triangulate()
         # scx.show_hide_points(scx.ST_POINT)
 
     return scx.get_main_figure(), scx.ST_POINT
@@ -488,11 +491,11 @@ def random_cloud(rnd_click, rnd_size):
 )
 def triangulate_cloud(sci_click):
     print(f"\n================\n" +
-          f" [{sci_click}] : triangulate " +
+          f" [{sci_click}] : sci click " +
           f"\n================\n")
 
-    if sci_click is not None:
-        scx.Triangulate()
+    # if sci_click is not None:
+    #     scx.Triangulate()
 
     return scx.get_main_figure(), scx.ST_POINT
 
@@ -511,6 +514,7 @@ def make_holes(mkholes_click, selected):
         print(f"%%% mk_holes :: selected names %%% {snames}")
         _, _, tnames, hnames = scx.filter_by_stypes(snames, by_points=False, by_edges=False)
         snames = list(set(tnames + hnames))
+        print(f"%%% mk_holes :: filtered names %%% {snames}")
         scx.MakeHoles(snames)
     return scx.get_main_figure()
 
