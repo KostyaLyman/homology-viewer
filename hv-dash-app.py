@@ -208,6 +208,7 @@ tris_tab_row = dbc.Row(children=[
     ])
 ], className='mb-0')
 
+
 holes_tab_row = dbc.Row(children=[
     dbc.Col(width=8, children=[
         html.P(),
@@ -222,6 +223,20 @@ holes_tab_row = dbc.Row(children=[
     ])
 ], className='mb-0')
 
+cell_tab_row = dbc.Row(children=[
+    dbc.Col(width=8, children=[
+        html.P(),
+        dbc.Card(children=[
+            dbc.CardHeader("Stats"),
+            dbc.CardBody(id='cell-stats-card')
+        ])
+    ]),
+    dbc.Col(width=4, children=[
+        html.P(),
+        dbc.Button("Make holes", id='make-cell-holes-button', color='primary')
+    ])
+], className='mb-0')
+
 simplex_tabs_row = dbc.Row([dbc.Col([
     # dbc.Card([
         dbc.Tabs(id='simplex-tabs', active_tab=scx.ST_POINT, class_name='nav-pills nav-justified',
@@ -233,7 +248,8 @@ simplex_tabs_row = dbc.Row([dbc.Col([
                              ),
                      dbc.Tab(label='Edges', tab_id=scx.ST_EDGE, children=[edges_tab_row]),
                      dbc.Tab(label='Triangles', tab_id=scx.ST_TRI, children=[tris_tab_row]),
-                     dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=False)
+                     dbc.Tab(label='Holes', tab_id=scx.ST_HOLE, children=[holes_tab_row], disabled=False),
+                     dbc.Tab(label='Cells', tab_id=scx.ST_CELL, children=[cell_tab_row], disabled=False),
                  ])
     # ])
 ])])
@@ -313,6 +329,7 @@ debug_data_row = dbc.Row([dbc.Col([dbc.Card([
 #                 ===== LAYOUT / APP =====
 # -----------------------------------------------------------------------------
 app.layout = html.Div([
+    dcc.Store(id='selected-cache'),
     # Title -----------------------------------------------
     dbc.Row([html.H1("2D Homology Viewer")],
             style={'textAlign': "center"}),
@@ -397,6 +414,11 @@ def display_click_data(clickData, selected, reset_click, stype):
         if stype == scx.ST_HOLE:
             hnames = set(scx.filter_by_stype(snames, scx.ST_HOLE))
             scx.highlight_holes(hnames)
+            pass
+
+        if stype == scx.ST_CELL:
+            cnames = set(scx.filter_by_stype(snames, scx.ST_CELL))
+            scx.highlight_cells(cnames)
             pass
 
     else:

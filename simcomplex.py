@@ -1,3 +1,4 @@
+import warnings
 import scipy as sp
 from scipy.spatial import Delaunay
 import numpy as np
@@ -41,7 +42,8 @@ EMPTY_LAYOUT = go.Layout(
         showlegend=False
 )
 
-SIMPLEX_TYPES = ST_POINT, ST_EDGE, ST_TRI, ST_HOLE = ("p", "e", "t", "h")
+SIMPLEX_TYPES = \
+    ST_POINT, ST_EDGE, ST_TRI, ST_HOLE, ST_CELL = ("p", "e", "t", "h", "c")
 
 # MID = mid point, HL = highlighting
 SC_POINTS = 'sc_points'
@@ -55,7 +57,10 @@ SC_TRACES = \
     SC_TRIS, SC_TRIS_MID, SC_TRIS_HL, \
     SC_HOLES, SC_HOLES_MID, SC_HOLES_HL
 
-SC_MIDS = {ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID, ST_HOLE: SC_HOLES_MID}
+SC_MIDS = {
+    ST_EDGE: SC_EDGES_MID, ST_TRI: SC_TRIS_MID, ST_HOLE: SC_HOLES_MID,
+    ST_CELL: (SC_TRIS_MID, SC_HOLES_MID)
+}
 MID_CONFIG = dict(marker_size=10, opacity=0.3)
 
 # colors for vertices, edges and 2-simplexes
@@ -78,14 +83,16 @@ COLORS_DICT = {
 }
 
 # model
-EMPTY_DATA = dict(
-    cache=dict(),
-    holes=dict(sc_names=(SC_HOLES, SC_HOLES_HL, SC_HOLES_MID)),
-    tris=dict(sc_names=(SC_TRIS, SC_TRIS_HL, SC_TRIS_MID)),
-    edges=dict(sc_names=(SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID)),
-    points=dict(sc_names=(SC_POINTS, ))
-)
-main_data = EMPTY_DATA
+def EMPTY_DATA():
+    return dict(
+        cache=dict(),
+        holes=dict(sc_names=(SC_HOLES, SC_HOLES_HL, SC_HOLES_MID)),
+        tris=dict(sc_names=(SC_TRIS, SC_TRIS_HL, SC_TRIS_MID)),
+        edges=dict(sc_names=(SC_EDGES, SC_EDGES_HL, SC_EDGES_NEG_HL, SC_EDGES_MID)),
+        points=dict(sc_names=(SC_POINTS,))
+    )
+
+main_data = EMPTY_DATA()
 
 # view
 main_layout = EMPTY_LAYOUT
@@ -135,22 +142,31 @@ def get_stype(sname: str):
 
     return stype
 
-# TODO: has_stype(sname, stype)
+
+def has_stype(sname, stype):
+    st = get_stype(sname)
+    if stype == ST_CELL:
+        return st == ST_TRI or st == ST_HOLE
+    else:
+        return st == stype
+
 
 def filter_by_stype(snames: list, stype) -> list:
-    filtered_names = list(filter(lambda name: get_stype(name) == stype, snames))
+    filtered_names = list(filter(lambda name: has_stype(name, stype), snames))
     return filtered_names
 
 
 def filter_by_stypes(snames: list, by_points=True, by_edges=True, by_tris=True, by_holes=True) -> list:
-    pnames = list(filter(lambda name: get_stype(name) == ST_POINT, snames)) if by_points else []
-    enames = list(filter(lambda name: get_stype(name) == ST_EDGE, snames))  if by_edges else []
-    tnames = list(filter(lambda name: get_stype(name) == ST_TRI, snames))   if by_tris else []
-    hnames = list(filter(lambda name: get_stype(name) == ST_HOLE, snames))  if by_holes else []
+    pnames = filter_by_stype(snames, ST_POINT) if by_points else []
+    enames = filter_by_stype(snames, ST_EDGE)  if by_edges else []
+    tnames = filter_by_stype(snames, ST_TRI)   if by_tris else []
+    hnames = filter_by_stype(snames, ST_HOLE)  if by_holes else []
     return pnames, enames, tnames, hnames
 
 
 def get_sname(sid, stype):
+    if stype == ST_CELL:
+        warnings.warn(f"get_sname for CELL type with sid={sid}")
     sname = f"{stype}{sid:04d}"
     return sname
 
@@ -255,7 +271,7 @@ def reset_fig() -> go.Figure:
     print("--- reset fig ---")
     global main_figure, main_data
 
-    main_data = EMPTY_DATA
+    main_data = EMPTY_DATA()
     sc_names = [scn for data in main_data.values() for scn in data.get('sc_names', [])]
     empty_sc = [go.Scatter(name=scn) for scn in sc_names]
 
@@ -275,7 +291,7 @@ def reset_fig() -> go.Figure:
 def setup_fig(layout=main_layout) -> go.Figure:
     global main_figure, main_data
 
-    main_data = EMPTY_DATA
+    main_data = EMPTY_DATA()
     sc_names = [scn for data in main_data.values() for scn in data.get('sc_names', [])]
     empty_sc = [go.Scatter(name=scn) for scn in sc_names]
 
@@ -1690,40 +1706,46 @@ def show_hide_points(stype, mode='visibility') -> go.Figure:
         :return:
     """
     # inner functions -------------------------------------
+
     def get_show_hide_sc(stype):
+        SC_MID_FLAT = [sc for st, sc in SC_MIDS.items() if st != ST_CELL]
         if stype == ST_POINT:  # turn off all mid-points
-            sc_on = SC_POINTS
-            sc_off = list(SC_MIDS.values())
+            sc_on = [SC_POINTS]
+            # sc_off = list(SC_MIDS.values())
+            sc_off = SC_MID_FLAT
 
         elif stype in SC_MIDS.keys():  # turn off all except a stype's mid point
-            sc_on = SC_MIDS[stype]
-            sc_off = [SC_POINTS] + [sc for sc in SC_MIDS.values() if sc != sc_on]
+            sc_on = SC_MIDS[stype] if type(SC_MIDS[stype]) is tuple else (SC_MIDS[stype], )
+            sc_off = [SC_POINTS] + [sc for sc in SC_MID_FLAT if sc not in sc_on]
 
         else:  # turn off everything
-            sc_on = None
-            sc_off = [SC_POINTS] + list(SC_MIDS.values())
+            sc_on = []
+            sc_off = [SC_POINTS] + SC_MID_FLAT
         return sc_off, sc_on
 
     # TODO: when config is implemented, do something with this..
-    sc_opacities = {
-        SC_POINTS: 1,
-        SC_EDGES_MID: MID_CONFIG['opacity'],
-        SC_TRIS_MID: MID_CONFIG['opacity'],
-        SC_HOLES_MID: MID_CONFIG['opacity']
-    }
+    # sc_opacities = {
+    #     SC_POINTS: 1,
+    #     SC_EDGES_MID: MID_CONFIG['opacity'],
+    #     SC_TRIS_MID: MID_CONFIG['opacity'],
+    #     SC_HOLES_MID: MID_CONFIG['opacity']
+    # }
 
     def set_opacity(sc_name, visible):
         if sc_name:
-            opacity = sc_opacities[sc_name] if visible else 0
+            # opacity = sc_opacities[sc_name] if visible else 0
+            opacity = (1 if sc_name == SC_POINTS else MID_CONFIG['opacity']) if visible else 0
             main_figure.update_traces(dict(
                 marker_opacity=opacity
             ), selector=dict(name=sc_name))
+            return sc_name, opacity
 
     def set_visibility(sc_name, visible):
         if sc_name:
             main_figure.update_traces(dict(
                 visible=visible
             ), selector=dict(name=sc_name))
+            return sc_name, visible
 
     # show / hide functions -------------------------------
     modes = dict(
@@ -1737,9 +1759,14 @@ def show_hide_points(stype, mode='visibility') -> go.Figure:
     show, hide = modes[mode]
     sc_off, sc_on = get_show_hide_sc(stype)
 
-    show(sc_on)
-    for sc in sc_off:
-        hide(sc)
+    print(f"### SHOW-HIDE ### type={stype} ==> on={sc_on} ==> off={sc_off}")
+    # on = [x for x in show(sc_on)]
+    on = [x for x in map(show, sc_on)]
+    off = [x for x in map(hide, sc_off)]
+    print(f"### >>> {on}")
+    print(f"### <<< {off}")
+    # for sc in sc_off:
+    #     hide(sc)
 
     return get_main_figure()
 
@@ -1817,7 +1844,7 @@ def highlight_triangles(tnames: list, **kwargs) -> go.Figure:
 
 def highlight_holes(hnames: list, **kwargs) -> go.Figure:
     """
-    Highlight a set of triangles
+    Highlight a set of holes
         :param hnames:
         :param kwargs:
         :return:
@@ -1836,6 +1863,34 @@ def highlight_holes(hnames: list, **kwargs) -> go.Figure:
 
     return get_main_figure()
 
+
+def highlight_cells(cnames: list, **kwargs) -> go.Figure:
+    """
+        Highlight a set of 2d-cells: triangles and holes
+            :param hnames:
+            :param kwargs:
+            :return:
+        """
+    hl_color_holes = kwargs.get("hl_color_holes", COLORS_DICT[SC_HOLES_HL])
+    hl_color_tris = kwargs.get("hl_color_tris", COLORS_DICT[SC_TRIS_HL])
+
+    global main_figure, main_data
+    if 'plotly' not in main_data['holes'] or 'plotly' not in main_data['tris']:
+        return get_main_figure()
+
+    _, _, tnames, hnames = filter_by_stypes(cnames, by_points=False, by_edges=False,)
+
+    plotly_tris = main_data['tris']['plotly']
+    plotly_tris_hl = gen_plotly_hl(tnames, plotly_tris, hl_color_tris)
+
+    plotly_holes = main_data['holes']['plotly']
+    plotly_holes_hl = gen_plotly_hl(hnames, plotly_holes, hl_color_holes)
+
+    upd_trace_tris_hl(plotly_tris_hl, hl_color_tris)
+    upd_trace_holes_hl(plotly_holes_hl, hl_color_holes)
+    highlight_boundary(cnames, **kwargs)
+
+    return get_main_figure()
 
 
 def highlight_boundary(snames: list, **kwargs) -> go.Figure:
